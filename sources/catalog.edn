@@ -1,0 +1,37 @@
+;; 19 法域＋GLEIF のソースカタログ（AWAI-3186）。
+;; 移植元: network-awai/app-itonami-legal-entity の AGENTS.md「Collectors (Phase 1)」表。
+;; :terms-verified-on が nil のソースは、利用条件・データ仕様をまだ一次資料で確認していない。
+;; 確認するまで parser を足さない（AWAI-3224 / AWAI-3225）。
+[{:id :gleif :jurisdiction "*" :registry "GLEIF LEI"
+  :access :api :key-required? false :license "CC0 1.0"
+  :url "https://api.gleif.org/api/v1/lei-records"
+  :terms-verified-on "2026-11-18"
+  :evidence "API 応答の形を 2026-11-18 に 1 件取得して確認（lei / entity / registration）"
+  :status :implemented :parser itonami.legal-entity.gleif}
+ {:id :jp-nta :jurisdiction "JP" :registry "国税庁 法人番号公表サイト"
+  :access :bulk-csv :key-required? false
+  :license "公共データ利用規約（第 1.0 版）。出典の記載と、加工したことの記載が必要"
+  :url "https://www.houjin-bangou.nta.go.jp/download/"
+  :terms-url "https://www.houjin-bangou.nta.go.jp/riyokiyaku/"
+  :spec-url "https://www.houjin-bangou.nta.go.jp/pc/download/images/k-resource-dl.pdf"
+  :spec-sha256 "9bc611fcf9d533502a34f287b6d8673564974b89fad23cba824cd681095ac8ba"
+  :terms-verified-on "2026-11-18"
+  :notes "Web-API はアプリケーション ID が要る。全件・差分ダウンロードは不要。検索対象除外（項番 36）は取り込まない"
+  :status :implemented :parser itonami.legal-entity.jp-nta}
+ {:id :gb-companies-house :jurisdiction "GB" :registry "UK Companies House" :status :planned :terms-verified-on nil}
+ {:id :fr-sirene :jurisdiction "FR" :registry "INSEE SIRENE" :status :planned :terms-verified-on nil}
+ {:id :no-brreg :jurisdiction "NO" :registry "Brønnøysundregistrene" :status :planned :terms-verified-on nil}
+ {:id :dk-cvr :jurisdiction "DK" :registry "CVR" :status :planned :terms-verified-on nil}
+ {:id :fi-prh :jurisdiction "FI" :registry "PRH" :status :planned :terms-verified-on nil}
+ {:id :ee-ariregister :jurisdiction "EE" :registry "e-Business Register" :status :planned :terms-verified-on nil}
+ {:id :be-kbo :jurisdiction "BE" :registry "KBO/BCE" :status :planned :terms-verified-on nil}
+ {:id :cz-ares :jurisdiction "CZ" :registry "ARES" :status :planned :terms-verified-on nil}
+ {:id :ch-zefix :jurisdiction "CH" :registry "Zefix" :status :planned :terms-verified-on nil}
+ {:id :nl-kvk :jurisdiction "NL" :registry "KVK" :status :planned :terms-verified-on nil}
+ {:id :us-sec-edgar :jurisdiction "US" :registry "SEC EDGAR" :status :planned :terms-verified-on nil}
+ {:id :ca-ised :jurisdiction "CA" :registry "ISED Corporations Canada" :status :planned :terms-verified-on nil}
+ {:id :br-cnpj :jurisdiction "BR" :registry "Receita Federal CNPJ" :status :planned :terms-verified-on nil}
+ {:id :au-abr :jurisdiction "AU" :registry "Australian Business Register" :status :planned :terms-verified-on nil}
+ {:id :nz-nzbn :jurisdiction "NZ" :registry "NZBN" :status :planned :terms-verified-on nil}
+ {:id :za-cipc :jurisdiction "ZA" :registry "CIPC" :status :planned :terms-verified-on nil}
+ {:id :il-rasham :jurisdiction "IL" :registry "Israeli Corporations Authority" :status :planned :terms-verified-on nil}]

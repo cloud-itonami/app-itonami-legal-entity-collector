@@ -1,0 +1,23 @@
+{:fixture
+ "fictional data only (test/itonami/legal_entity/fixtures.clj)",
+ :runs
+ [{:source :jp-nta,
+   :record-ids
+   ["jp-nta:8990000000001"
+    "jp-nta:7990000000002"
+    "jp-nta:5990000000004"],
+   :skipped
+   [{:index 4, :skip "処理区分 99（削除）"} {:index 5, :skip "検索対象除外"}],
+   :rejected
+   [{:index 1, :reject "法人番号が不正: \"1990000000001\""}
+    {:index 2, :reject "法人種別が不正: \"999\""}
+    {:index 7, :reject "列数が 3（期待 30）"}
+    {:index 8, :reject "引用符が閉じていない"}]}
+  {:source :gleif,
+   :record-ids ["lei:FAKE00TESTLEI0000134" "lei:FAKE00TESTLEI0000231"],
+   :skipped [],
+   :rejected
+   [{:index 1, :reject "LEI が不正: \"FAKE00TESTLEI0000199\""}
+    {:index 2, :reject "entity/name が空"}]}
+  {:source :gb-companies-house, :error "未実装のソース"}
+  {:source :dnb, :error "カタログにないソース"}]}
