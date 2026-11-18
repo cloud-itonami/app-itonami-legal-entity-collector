@@ -27,6 +27,11 @@
    :fr-siren ids/fr-siren?
    :no-orgnr ids/no-orgnr?
    :fi-business-id ids/fi-business-id?
+   :us-sec-cik ids/us-sec-cik?
+   :au-abn ids/au-abn?
+   :au-acn ids/au-acn?
+   :ca-corporation-number ids/ca-corporation-number?
+   :ca-business-number ids/ca-business-number?
    :registration-number #(and (string? %) (<= 1 (count %) 64))})
 
 (defn identifier-problems [{:keys [scheme value]}]
