@@ -1,8 +1,8 @@
 {:paths ["src" "test" "scripts"]
  :tasks
  {test {:doc "全 test を実行する（失敗があれば exit 1）"
-        :task (let [{:keys [fail error]} (do (require 'itonami.legal-entity.core-test)
-                                             (clojure.test/run-tests 'itonami.legal-entity.core-test))]
+        :task (let [{:keys [fail error]} (do (require 'itonami.legal-entity.core-test 'itonami.legal-entity.europe-test)
+                                             (clojure.test/run-tests 'itonami.legal-entity.core-test 'itonami.legal-entity.europe-test))]
                 (System/exit (if (zero? (+ fail error)) 0 1)))}
   fixture-run {:doc "架空データで GLEIF と国税庁法人番号の collector を通し、記録を標準出力に書く"
                :task (do (require 'fixture-run) ((resolve 'fixture-run/-main)))}

@@ -2,7 +2,7 @@
 
 公開一次情報（各国の法人登記・GLEIF）から法人データを集め、出典つきの共通スキーマに正規化する Itonami profile です。D&B・帝国データバンク・Moody's の契約データに頼らない、Awai Network の自前の企業データ基盤の収集側にあたります（Linear AWAI-3186）。
 
-## いまあるもの（2026-11-18）
+## いまあるもの（2026-11-18 時点）
 
 | 部分 | 状態 |
 |---|---|
@@ -10,7 +10,9 @@
 | 識別子の検証（法人番号のチェックデジット、LEI の ISO 7064 MOD 97-10） | 実装・テスト済み（実在の値 2 件で検算） |
 | GLEIF（API の lei-records 形式、CC0 1.0） | 実装・架空データでテスト済み |
 | 国税庁 法人番号（全件・差分 CSV、リソース定義書 4.1 版の 30 列） | 実装・架空データでテスト済み |
-| 他の 17 法域 | `sources/catalog.edn` に名前だけ。利用条件・仕様は未確認（AWAI-3224 / AWAI-3225） |
+| 英国 Companies House・フランス SIRENE・ノルウェー Brønnøysund・フィンランド PRH（AWAI-3224） | 実装・架空データでテスト済み。個人事業主・部分公開は取り込まない |
+| デンマーク・エストニア・ベルギー・チェコ・スイス・オランダ | 受け付けない。確認できなかった理由は `sources/catalog.edn` の `:blocked-reason` |
+| 米州・その他 7 法域 | `sources/catalog.edn` に名前だけ（AWAI-3225） |
 | 取得（ダウンロード） | 未実装。parser は取得済みの入力を受け取るだけ |
 | profile `hermes/profiles/legal-entity-collector/` | 定義のみ。runtime での実行は未検証。cron 無効 |
 
