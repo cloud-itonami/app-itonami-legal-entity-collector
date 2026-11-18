@@ -1,0 +1,2 @@
+name: legal-entity-collector
+description: "Legal entity collector: 公開一次情報（各国の法人登記・GLEIF）から法人データを集め、出典つきの共通スキーマに正規化する"

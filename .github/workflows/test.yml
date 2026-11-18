@@ -1,0 +1,19 @@
+name: test
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  bb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeLaGuardo/setup-clojure@12.5
+        with:
+          bb: 1.12.218
+      - run: bb test
+      - run: bb check-profiles
+      - name: fixture run matches the recorded evidence
+        run: bb fixture-run | diff - docs/evidence/fixture-run.edn
