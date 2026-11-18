@@ -23,6 +23,10 @@
   "scheme → 値の検証関数。未知の scheme は拒否する。"
   {:jp-corporate-number ids/jp-corporate-number?
    :lei ids/lei?
+   :gb-company-number ids/gb-company-number?
+   :fr-siren ids/fr-siren?
+   :no-orgnr ids/no-orgnr?
+   :fi-business-id ids/fi-business-id?
    :registration-number #(and (string? %) (<= 1 (count %) 64))})
 
 (defn identifier-problems [{:keys [scheme value]}]

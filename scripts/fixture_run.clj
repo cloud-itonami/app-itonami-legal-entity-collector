@@ -18,5 +18,5 @@
      {:fixture "fictional data only (test/itonami/legal_entity/fixtures.clj)"
       :runs [(summarize (collect/collect catalog :jp-nta (map fx/nta-lines (sort (keys fx/nta-lines)))))
              (summarize (collect/collect catalog :gleif (map fx/gleif-records (sort (keys fx/gleif-records)))))
-             (summarize (collect/collect catalog :gb-companies-house []))
+             (summarize (collect/collect catalog :dk-cvr []))
              (summarize (collect/collect catalog :dnb []))]})))

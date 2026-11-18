@@ -88,7 +88,8 @@
 (deftest catalog-shape
   (is (= 19 (count catalog)) "GLEIF＋移植元の 18 法域")
   (is (apply distinct? (map :id catalog)))
-  (is (= #{:gleif :jp-nta} (set (map :id (filter #(= :implemented (:status %)) catalog)))))
+  (is (= #{:gleif :jp-nta :gb-companies-house :fr-sirene :no-brreg :fi-prh}
+         (set (map :id (filter #(= :implemented (:status %)) catalog)))))
   (doseq [e catalog :when (= :implemented (:status e))]
     (is (every? e [:license :url :terms-verified-on :parser]) (name (:id e)))))
 
@@ -99,6 +100,6 @@
     (is (= 4 (count (:rejected res)))))
   (testing "負の対照"
     (is (= "カタログにないソース" (:error (collect/collect catalog :dnb []))))
-    (is (= "未実装のソース" (:error (collect/collect catalog :gb-companies-house []))))
+    (is (= "未実装のソース" (:error (collect/collect catalog :dk-cvr []))))
     (is (= "利用条件が未確認のソース"
            (:error (collect/collect (map #(assoc % :terms-verified-on nil) catalog) :gleif []))))))

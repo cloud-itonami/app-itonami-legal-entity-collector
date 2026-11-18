@@ -19,5 +19,5 @@
    :rejected
    [{:index 1, :reject "LEI が不正: \"FAKE00TESTLEI0000199\""}
     {:index 2, :reject "entity/name が空"}]}
-  {:source :gb-companies-house, :error "未実装のソース"}
+  {:source :dk-cvr, :error "未実装のソース"}
   {:source :dnb, :error "カタログにないソース"}]}
