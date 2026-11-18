@@ -65,10 +65,41 @@
  {:id :nl-kvk :jurisdiction "NL" :registry "KVK" :status :planned :terms-verified-on nil
   :license-candidate "Open Dataset Basis Bedrijfsgegevens は CC BY 4.0（developers.kvk.nl、2026-11-18 確認）"
   :blocked-reason "無償のオープンデータは BV・NV の属性だけで、会社名と KVK 番号を含まない（共通スキーマの名称を満たせない）。名称を含む API は有償"}
- {:id :us-sec-edgar :jurisdiction "US" :registry "SEC EDGAR" :status :planned :terms-verified-on nil}
- {:id :ca-ised :jurisdiction "CA" :registry "ISED Corporations Canada" :status :planned :terms-verified-on nil}
- {:id :br-cnpj :jurisdiction "BR" :registry "Receita Federal CNPJ" :status :planned :terms-verified-on nil}
- {:id :au-abr :jurisdiction "AU" :registry "Australian Business Register" :status :planned :terms-verified-on nil}
- {:id :nz-nzbn :jurisdiction "NZ" :registry "NZBN" :status :planned :terms-verified-on nil}
- {:id :za-cipc :jurisdiction "ZA" :registry "CIPC" :status :planned :terms-verified-on nil}
- {:id :il-rasham :jurisdiction "IL" :registry "Israeli Corporations Authority" :status :planned :terms-verified-on nil}]
+ {:id :us-sec-edgar :jurisdiction "US" :registry "SEC EDGAR"
+  :access :bulk-json :key-required? false
+  :license "SEC.gov の情報は公開情報で、SEC の許可なく複製・再配布できる。出典として SEC を示す。SEC の印章・ロゴ・EDGAR の商標は使わない（SEC.gov「Privacy and Security Policy」）"
+  :url "https://www.sec.gov/search-filings/edgar-application-programming-interfaces"
+  :terms-url "https://www.sec.gov/privacy"
+  :access-conditions {:user-agent "名前と連絡先メールアドレスを User-Agent に申告する（例: Sample Company Name AdminContact@<domain>）"
+                      :max-requests-per-second 10
+                      :source-url "https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data"}
+  :terms-verified-on "2026-11-18"
+  :evidence "submissions JSON の項目名を 2026-11-18 に公開会社 1 社の応答で確認（cik, entityType, name, stateOfIncorporation, addresses.business, lei）"
+  :notes "submissions.zip（毎晩更新）か data.sec.gov/submissions。entityType が operating のものだけを取り込み、個人の filer は取り込まない。EDGAR は存続状態を持たないので status は :unknown"
+  :status :implemented :parser itonami.legal-entity.us-sec-edgar}
+ {:id :ca-ised :jurisdiction "CA" :registry "ISED Corporations Canada"
+  :access :bulk-csv :key-required? false :license "Open Government Licence - Canada"
+  :url "https://open.canada.ca/data/en/dataset/0032ce54-c5dd-4b66-99a0-320a7b5e99f2"
+  :terms-url "https://open.canada.ca/en/open-government-licence-canada"
+  :terms-verified-on "2026-11-18"
+  :evidence "CSV の見出し 18 列を 2026-11-18 に active-cbca と inactive-or-dissolved-non-cbca の英語版の先頭行で確認"
+  :notes "連邦法人だけ（州法人は含まない）。英語版の 4 ファイルを使う。Status の値は Active のほかを確認できていない。取締役の人数の列は取り込まない"
+  :status :implemented :parser itonami.legal-entity.ca-ised}
+ {:id :br-cnpj :jurisdiction "BR" :registry "Receita Federal CNPJ" :status :planned :terms-verified-on nil
+  :blocked-reason "ライセンスの記載が二次情報で食い違う（dados.gov.br は CC BY、別の情報では Receita の公開場所が CC BY-ND 3.0 で改変不可）。dados.gov.br と Receita Federal の一次資料を取得できなかった。Empresas には個人事業主（MEI など）の氏名が入るため、除外の規則も要る"}
+ {:id :au-abr :jurisdiction "AU" :registry "Australian Business Register"
+  :access :bulk-xml :key-required? false :license "CC BY 3.0 AU"
+  :url "https://data.gov.au/data/dataset/abn-bulk-extract"
+  :spec-url "https://data.gov.au/data/dataset/5bd7fcab-e315-42cb-8daf-50b7efc2027e/resource/f3f8f8a1-590c-4d87-8285-806b093c2c69/download/bulkextract.xsd"
+  :spec-sha256 "e19f5f991fdc3498e71faaf9f88574cab5d1d7d3cc23015c324e2f75ca45c670"
+  :terms-verified-on "2026-11-18"
+  :evidence "ライセンスは data.gov.au の CKAN package_show（license_id cc-by、Creative Commons Attribution 3.0 Australia）で 2026-11-18 に確認"
+  :notes "個人事業主（LegalEntity / IND）は取り込まない。家族名を含みうる信託・組合も取り込まず、PRV・PUB・COP・OIE だけを受け付ける。XML から map への変換は未実装"
+  :status :implemented :parser itonami.legal-entity.au-abr}
+ {:id :nz-nzbn :jurisdiction "NZ" :registry "NZBN" :status :planned :terms-verified-on nil
+  :blocked-reason "一括データは Companies Office の Bulk Data Access Agreement への同意が要り、利用目的を超えると NZBN API（登録が要る）を求められる。NZBN API の利用条件を一次資料で確認できなかった。同意は owner の判断"}
+ {:id :za-cipc :jurisdiction "ZA" :registry "CIPC" :status :planned :terms-verified-on nil
+  :blocked-reason "公式の一括データ・公開 API が見つからない。二次情報では CIPC の利用条件が機械的な一括取得を禁じ、再販にはライセンスが要る。新しいオープンデータポータルを準備中との報道（2026-07）があり、公開を待つ"}
+ {:id :il-rasham :jurisdiction "IL" :registry "Israeli Corporations Authority" :status :planned :terms-verified-on nil
+  :license-candidate "data.gov.il のデータセット ica_companies のライセンス欄は Other (Open)（CKAN package_show、2026-11-18 確認）"
+  :blocked-reason "data.gov.il の利用条件の本文（出典の示し方・商用利用）を一次資料で取得できなかった（terms ページが 403/404）。列名は datastore_search で確認済み"}]

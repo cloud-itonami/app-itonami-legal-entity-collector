@@ -12,7 +12,8 @@
 | 国税庁 法人番号（全件・差分 CSV、リソース定義書 4.1 版の 30 列） | 実装・架空データでテスト済み |
 | 英国 Companies House・フランス SIRENE・ノルウェー Brønnøysund・フィンランド PRH（AWAI-3224） | 実装・架空データでテスト済み。個人事業主・部分公開は取り込まない |
 | デンマーク・エストニア・ベルギー・チェコ・スイス・オランダ | 受け付けない。確認できなかった理由は `sources/catalog.edn` の `:blocked-reason` |
-| 米州・その他 7 法域 | `sources/catalog.edn` に名前だけ（AWAI-3225） |
+| 米国 SEC EDGAR・カナダ Corporations Canada・オーストラリア ABR（AWAI-3225） | 実装・架空データでテスト済み。個人の filer・個人事業主・信託は取り込まない。ABR の XML から map への変換は未実装 |
+| ブラジル・ニュージーランド・南アフリカ・イスラエル | 受け付けない。確認できなかった理由は `sources/catalog.edn` の `:blocked-reason` |
 | 取得（ダウンロード） | 未実装。parser は取得済みの入力を受け取るだけ |
 | profile `hermes/profiles/legal-entity-collector/` | 定義のみ。runtime での実行は未検証。cron 無効 |
 

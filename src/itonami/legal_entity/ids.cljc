@@ -75,6 +75,36 @@
   [s]
   (and (string? s) (boolean (re-matches #"[A-Z0-9]{8}" s))))
 
+(defn us-sec-cik?
+  "SEC EDGAR の CIK。data.sec.gov の表記どおり、先頭を 0 で埋めた 10 桁。検査数字はない。"
+  [s]
+  (digits? s 10))
+
+(defn au-abn?
+  "オーストラリアの ABN（11 桁）。先頭の桁から 1 を引き、重み 10,1,3,5,7,9,11,13,15,17,19 の和が 89 で割り切れる。"
+  [s]
+  (and (digits? s 11)
+       (let [[d & ds] (map digit s)]
+         (zero? (mod (weighted-sum [10 1 3 5 7 9 11 13 15 17 19] (cons (dec d) ds)) 89)))))
+
+(defn au-acn?
+  "オーストラリアの ACN（9 桁）。先頭 8 桁の重み 8..1 の和を 10 で割った余りの補数（10 - r、10 なら 0）が末尾の桁。"
+  [s]
+  (and (digits? s 9)
+       (let [ds (map digit s)
+             r (mod (weighted-sum [8 7 6 5 4 3 2 1] (take 8 ds)) 10)]
+         (= (mod (- 10 r) 10) (last ds)))))
+
+(defn ca-corporation-number?
+  "Corporations Canada の法人番号。7〜8 桁の数字か、末尾に -N の付く形（例 1234567、123456-7）。検査数字は確かめない。"
+  [s]
+  (and (string? s) (boolean (re-matches #"[0-9]{6,8}|[0-9]{6,7}-[0-9]" s))))
+
+(defn ca-business-number?
+  "カナダの事業者番号 BN の先頭 9 桁（BN9）。検査数字は確かめない。"
+  [s]
+  (digits? s 9))
+
 (defn country-code?
   "ISO 3166-1 alpha-2 の形（大文字 2 文字）。実在の国かまでは見ない。"
   [s]

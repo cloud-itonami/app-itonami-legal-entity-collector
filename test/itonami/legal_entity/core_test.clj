@@ -88,7 +88,7 @@
 (deftest catalog-shape
   (is (= 19 (count catalog)) "GLEIF＋移植元の 18 法域")
   (is (apply distinct? (map :id catalog)))
-  (is (= #{:gleif :jp-nta :gb-companies-house :fr-sirene :no-brreg :fi-prh}
+  (is (= #{:gleif :jp-nta :gb-companies-house :fr-sirene :no-brreg :fi-prh :us-sec-edgar :ca-ised :au-abr}
          (set (map :id (filter #(= :implemented (:status %)) catalog)))))
   (doseq [e catalog :when (= :implemented (:status e))]
     (is (every? e [:license :url :terms-verified-on :parser]) (name (:id e)))))

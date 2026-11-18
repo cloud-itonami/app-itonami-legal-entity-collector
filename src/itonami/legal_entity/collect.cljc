@@ -1,13 +1,16 @@
 (ns itonami.legal-entity.collect
   "ソースごとの parser を呼び、受理・除外・拒否を集計する。
   取得（ダウンロード）はここでは行わない。呼び出し側が取得済みの入力を渡す。"
-  (:require [itonami.legal-entity.csv :as csv]
+  (:require [itonami.legal-entity.au-abr :as au-abr]
+            [itonami.legal-entity.ca-ised :as ca-ised]
+            [itonami.legal-entity.csv :as csv]
             [itonami.legal-entity.fi-prh :as fi-prh]
             [itonami.legal-entity.fr-sirene :as fr-sirene]
             [itonami.legal-entity.gb-companies-house :as gb-ch]
             [itonami.legal-entity.gleif :as gleif]
             [itonami.legal-entity.jp-nta :as jp-nta]
-            [itonami.legal-entity.no-brreg :as no-brreg]))
+            [itonami.legal-entity.no-brreg :as no-brreg]
+            [itonami.legal-entity.us-sec-edgar :as us-sec-edgar]))
 
 (def parsers
   "実装済みのソース → {:input 入力の形, :parse 1 件を {:record}/{:skip}/{:reject} にする関数}。
@@ -17,7 +20,10 @@
    :gb-companies-house {:input :csv-with-header :parse gb-ch/normalize}
    :fr-sirene {:input :csv-with-header :parse fr-sirene/normalize}
    :no-brreg {:input :maps :parse no-brreg/normalize}
-   :fi-prh {:input :maps :parse fi-prh/normalize}})
+   :fi-prh {:input :maps :parse fi-prh/normalize}
+   :us-sec-edgar {:input :maps :parse us-sec-edgar/normalize}
+   :ca-ised {:input :csv-with-header :parse ca-ised/normalize}
+   :au-abr {:input :maps :parse au-abr/normalize}})
 
 (defn collect
   "catalog はソースカタログ（sources/catalog.edn）、inputs は取得済みの入力の列。
