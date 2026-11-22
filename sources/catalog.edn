@@ -43,8 +43,10 @@
   :terms-verified-on "2026-11-18"
   :notes "enheter の全件 JSON（毎晩更新）。enkeltpersonforetak（ENK）は取り込まない。役割（roller）は扱わない"
   :status :implemented :parser itonami.legal-entity.no-brreg}
- {:id :dk-cvr :jurisdiction "DK" :registry "CVR" :status :planned :terms-verified-on nil
-  :blocked-reason "Erhvervsstyrelsen の現行の利用条件を一次資料で確認できなかった。非公式の写しには機械的・体系的な収集を禁じる条項がある。system-til-system の利用条件と reklamebeskyttelse の扱いを確認するまで受け付けない"}
+ {:id :dk-cvr :jurisdiction "DK" :registry "CVR" :status :planned
+  :terms-url "https://datacvr.virk.dk/artikel/system-til-system-adgang-til-cvr-data"
+  :terms-verified-on "2026-11-23"
+  :blocked-reason "規約は可（Vilkår for brug af danske offentlige data v4、2015-03-10：無償・商用可・出典表示）。system-til-system も無償だが、Erhvervsstyrelsen への申請（書類、処理約 3 週間）と Basic 認証の発行が要り、Elasticsearch の文書モデルはログイン後にしか見られないため、reklamebeskyttelse の扱いと personkreds（個人参加者）の除外フィールドを一次資料で確認できない。申請を出して文書モデルを確認するまで parser を足さない。次にやること：申請→文書モデルの確認→parser 実装"}
  {:id :fi-prh :jurisdiction "FI" :registry "PRH YTJ open data"
   :access :bulk-json :key-required? false :license "CC BY 4.0"
   :url "https://avoindata.prh.fi/opendata-ytj-api/v3/all_companies"
@@ -53,18 +55,52 @@
   :terms-verified-on "2026-11-18"
   :notes "OpenAPI 定義の license が CC BY 4.0。会社形態がコード表 YRMU にないものは取り込まない。all_companies の応答の外側の形（配列か、companies を持つ object か）は未確認"
   :status :implemented :parser itonami.legal-entity.fi-prh}
- {:id :ee-ariregister :jurisdiction "EE" :registry "e-Business Register" :status :planned :terms-verified-on nil
-  :license-candidate "CC BY 4.0（avaandmed.ariregister.rik.ee の License information のリンク先、2026-11-18 確認）"
-  :blocked-reason "利用条件（CC BY 4.0）は確認できたが、基本データ（lihtandmed）CSV の列名を一次資料で確認できなかった。ダウンロードにはライセンスへの同意が要る"}
- {:id :be-kbo :jurisdiction "BE" :registry "KBO/BCE" :status :planned :terms-verified-on nil
-  :blocked-reason "KBO Open Data はダウンロードに登録と利用条件への同意が要り、商用の再利用は有償（年 30,000 EUR とする情報あり、二次情報）。公式の利用条件の本文を確認するまで受け付けない"}
- {:id :cz-ares :jurisdiction "CZ" :registry "ARES" :status :planned :terms-verified-on nil
-  :blocked-reason "財務省は「運用条件に従えば誰でも使える」とするが、運用条件の本文（照会数の上限・遮断の条件）とライセンスを一次資料で確認できなかった"}
- {:id :ch-zefix :jurisdiction "CH" :registry "Zefix" :status :planned :terms-verified-on nil
-  :blocked-reason "opendata.swiss には Zefix の一部しかなく、Zefix REST API の利用条件を一次資料で確認できなかった"}
- {:id :nl-kvk :jurisdiction "NL" :registry "KVK" :status :planned :terms-verified-on nil
-  :license-candidate "Open Dataset Basis Bedrijfsgegevens は CC BY 4.0（developers.kvk.nl、2026-11-18 確認）"
-  :blocked-reason "無償のオープンデータは BV・NV の属性だけで、会社名と KVK 番号を含まない（共通スキーマの名称を満たせない）。名称を含む API は有償"}
+ {:id :ee-ariregister :jurisdiction "EE" :registry "e-Business Register"
+  :access :bulk-csv :key-required? false :license "CC BY 4.0"
+  :url "https://avaandmed.ariregister.rik.ee/en/downloading-open-data"
+  :terms-url "https://avaandmed.ariregister.rik.ee/en/terms-service"
+  :spec-url "https://avaandmed.ariregister.rik.ee/sites/default/files/avaandmed/ettevotja_rekvisiidid__lihtandmed.csv.zip"
+  :spec-sha256 "5672ca914ace30154d0503468ceee9190c4614560191ce5900c7fb3d55220453"
+  :terms-verified-on "2026-11-23"
+  :evidence "lihtandmed.csv.zip の見出し 17 列を 2026-11-23 の実ファイル先頭行で確認（nimi;ariregistri_kood;...;teabesysteemi_link）。状態は R=Registrisse kantud、L=Likvideerimisel、N=Pankrotis"
+  :notes "個人事業主（Füüsilisest isikust ettevõtja）は取り込まない。区切りは ; で BOM 付き。lihtandmed は R/L/N のみ（削除済みなし）。日報スナップショットのため :spec-sha256 は 2026-11-23 の版を示す"
+  :status :implemented :parser itonami.legal-entity.ee-ariregister}
+ {:id :be-kbo :jurisdiction "BE" :registry "KBO/BCE" :status :planned
+  :terms-url "https://economie.fgov.be/nl/themas/ondernemingen/kruispuntbank-van/diensten-voor-iedereen/hergebruik-van-publieke/kruispuntbank-van-0"
+  :terms-verified-on "2026-11-23"
+  :blocked-reason "規約不可・owner 判断要：KBO ライセンスは無償（Art. 7、年 30,000 EUR は誤り）だが、登録とライセンス.accept が必須で、利用目的は登録時の申告に限定（Art. 2.3）、データを変更せず原形的を保つこと（Art. 2.7）、譲渡・下請負禁止（Art. 11）、知的財産権は付与されない。Awai の正規化・共通スキーマ化に使えるかは owner の判断。弁護士確認まで parser を足さない。次にやること：owner の判断→登録とライセンス締結→enterprise/denomination/address の結合 parser"}
+ {:id :cz-ares :jurisdiction "CZ" :registry "ARES"
+  :access :api :key-required? false
+  :license "財務省のオープンデータ。データは運用条件に従って無償で利用でき、登録・キーは要らない。出典として ARES を示す"
+  :url "https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty/{ico}"
+  :terms-url "https://data.mf.gov.cz/topics/ares"
+  :spec-url "https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/v3/api-docs"
+  :spec-sha256 "822372bcc181740c1a0f43d0507c204780f575c7ddea837a65064a07a0819134"
+  :terms-verified-on "2026-11-23"
+  :access-conditions {:max-requests-per-minute 500
+                      :block-conditions "500 件/分超、不正アクセスの試み、誤った照会の繰り返し、同一照会の繰り返し、並列の自動照会、複数 IP での制限回避、ランダムな自動検索（mf.gov.cz の運用条件）"
+                      :source-url "https://mf.gov.cz/cs/ministerstvo/informacni-systemy/ares"}
+  :evidence "OpenAPI v3 api-docs（2026-11-23 取得）で EkonomickySubjekt の項目名を確認（ico, obchodniJmeno, sidlo, pravniForma, datumVzniku, datumZaniku）。PravniForma コード表は /ciselniky-nazevniky/vyhledat で確認"
+  :notes "個人事業主（pravniForma 100-109・424・425）は取り込まない。REST に日次上限はない（旧 XML 限定の 6 万件/日は廃止）。@version 1.4.0"
+  :status :implemented :parser itonami.legal-entity.cz-ares}
+ {:id :ch-zefix :jurisdiction "CH" :registry "Zefix"
+  :access :api :key-required? true
+  :license "OGD Open use. Must provide the source.（商用利用可、出典表示必須、opendata.swiss の利用条件）"
+  :url "https://www.zefix.admin.ch/ZefixPublicREST"
+  :terms-url "https://www.bj.admin.ch/de/handelsregister-zefix-und-regix"
+  :spec-url "https://www.zefix.admin.ch/ZefixPublicREST/v3/api-docs"
+  :spec-sha256 "ff8e72380dcb0dbde910919154f5295051b0006a12513195afe7d8d110781450"
+  :terms-verified-on "2026-11-23"
+  :access-conditions {:credentials "zefix@bj.admin.ch への申請で HTTP Basic のユーザー名・パスワードが発行される。無償（HRegV）"
+                      :source-url "https://www.bj.admin.ch/de/handelsregister-zefix-und-regix"}
+  :evidence "v3/api-docs（2.7.2.4、2026-11-23 取得）で CompanyFull の項目名を確認（name, uid, legalForm, status, deletionDate, address, canton）。UID 検査数字は eCH-0097 2.4.2 で検証、例 CHE109322551"
+  :notes "個人事業（Einzelunternehmen、eCH-0097 0101）は取り込まない。登録日は公開されていない（sogcDate のみ）。全件取得は提供されない（単一照会中心）"
+  :status :implemented :parser itonami.legal-entity.ch-zefix}
+ {:id :nl-kvk :jurisdiction "NL" :registry "KVK" :status :planned
+  :terms-url "https://developers.kvk.nl/nl/documentation/open-dataset-basis-bedrijfsgegevens-api"
+  :terms-verified-on "2026-11-23"
+  :license-candidate "Open Dataset Basis Bedrijfsgegevens は CC BY 4.0（developers.kvk.nl、2026-11-23 確認）"
+  :blocked-reason "規約不可・owner 判断要：無償のオープンデータ（CC BY 4.0）は会社名と KVK 番号を含まず、共通スキーマの名称を満たせない。名称を含む API は有償（2026-11-23 確認）。勝手に有償化しない。有償 API の契約は owner の判断待ち"}
  {:id :us-sec-edgar :jurisdiction "US" :registry "SEC EDGAR"
   :access :bulk-json :key-required? false
   :license "SEC.gov の情報は公開情報で、SEC の許可なく複製・再配布できる。出典として SEC を示す。SEC の印章・ロゴ・EDGAR の商標は使わない（SEC.gov「Privacy and Security Policy」）"

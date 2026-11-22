@@ -21,18 +21,31 @@
 (deftest identifiers
   (testing "PRH の OpenAPI 定義にある例で検算"
     (is (ids/fi-business-id? "0116297-6")))
+  (testing "ARES の一次資料にある例で検算（財務省の案内にある IČO 00006947 と 00177041）"
+    (is (ids/cz-ico? "00006947"))
+    (is (ids/cz-ico? "00177041")))
+  (testing "eCH-0097 の例で検算（CHE109322551）"
+    (is (ids/ch-uid? "CHE109322551")))
   (testing "架空の値"
     (is (every? ids/fr-siren? ["999900004" "999900012" "999900020"]))
     (is (every? ids/no-orgnr? ["999000002" "999000010" "999000029"]))
     (is (every? ids/fi-business-id? ["9990000-8" "9990001-6" "9990002-4"]))
-    (is (ids/gb-company-number? "ZZ000001")))
+    (is (ids/gb-company-number? "ZZ000001"))
+    (is (every? ids/cz-ico? ["99900017" "99900025" "99900033"]))
+    (is (every? ids/ch-uid? ["CHE-999.000.019" "CHE-999.000.025" "CHE-999.000.031"]))
+    (is (every? ids/ee-registry-code? ["99999999" "12345678"])))
   (testing "負の対照"
     (is (not (ids/fr-siren? "999900005")))
     (is (not (ids/no-orgnr? "999000003")))
     (is (not (ids/fi-business-id? "9990000-7")))
     (is (not (ids/fi-business-id? "99900008")) "ハイフンなし")
     (is (not (ids/gb-company-number? "zz000001")))
-    (is (not (ids/gb-company-number? "ZZ00001")) "7 文字")))
+    (is (not (ids/gb-company-number? "ZZ00001")) "7 文字")
+    (is (not (ids/cz-ico? "99900018")) "検査数字不一致")
+    (is (not (ids/cz-ico? "9990001")) "7 桁")
+    (is (not (ids/ch-uid? "CHE-999.000.010")) "検査数字不一致")
+    (is (not (ids/ch-uid? "ADM-999.000.019")) "CHE ではない")
+    (is (not (ids/ee-registry-code? "991234")))))
 
 ;; --- GB -------------------------------------------------------------------
 
@@ -163,20 +176,137 @@
     (testing "負の対照: チェックデジット不一致"
       (is (= [4] (map :index (:rejected res)))))))
 
+;; --- EE -------------------------------------------------------------------
+;; 17 列の見出しは 2026-11-23 に取得した lihtaandmed.csv.zip の先頭行どおり。
+;; 区切りは ;（csv/rows の 2 引数版）。
+
+(def ee-header
+  (str/join ";" ["nimi" "ariregistri_kood" "ettevotja_oiguslik_vorm" "ettevotja_oigusliku_vormi_alaliik"
+                 "kmkr_nr" "ettevotja_staatus" "ettevotja_staatus_tekstina" "ettevotja_esmakande_kpv"
+                 "ettevotja_aadress" "asukoht_ettevotja_aadressis" "asukoha_ehak_kood" "asukoha_ehak_tekstina"
+                 "indeks_ettevotja_aadressis" "ads_adr_id" "ads_ads_oid" "ads_normaliseeritud_taisaadress"
+                 "teabesysteemi_link"]))
+
+(defn- ee [& xs] (str/join ";" xs))
+
+(def ee-lines
+  [ee-header
+   (ee "FICTIVE HOLDING OÜ" "99999999" "Osaühing" "" "" "R" "Registrisse kantud" "05.06.2023"
+       "Regati pst 1" "TEST LINNA, Tallinn, Harju maakond" "0596" "Tallinn" "11911" "1" "2"
+       "Harju maakond, Tallinn, TEST LINNA, Regati pst 1" "https://example.test/99999999")
+   (ee "FICTIVE LIKVIDEERIMISEL AS" "99999998" "Aktsiaselts" "" "" "L" "Likvideerimisel" "01.02.2010"
+       "" "Tartu linn, Tartu linn, Tartu maakond" "8151" "Tartu" "51003" "" "" "" "https://example.test/99999998")
+   (ee "VANA FIKTIIV" "99999997" "Täisühing" "" "" "N" "Pankrotis" "03.03.2003"
+       "" "" "" "" "" "" "" "" "https://example.test/99999997")
+   (ee "FIKTIIV FIE" "99999996" "Füüsilisest isikust ettevõtja" "" "" "R" "Registrisse kantud" "04.04.2004"
+       "" "" "" "" "" "" "" "" "https://example.test/99999996")
+   (ee "BAD CODE OÜ" "123456" "Osaühing" "" "" "R" "Registrisse kantud" "04.04.2004"
+       "" "" "" "" "" "" "" "" "https://example.test/123456")])
+
+(deftest ee-ariregister
+  (let [res (collect/collect catalog :ee-ariregister ee-lines)
+        [a b c] (:records res)]
+    (is (= ["ee-ariregister:99999999" "ee-ariregister:99999998" "ee-ariregister:99999997"]
+           (map :entity/id (:records res))))
+    (is (every? schema/valid? (:records res)))
+    (is (= [:active "2023-06-05" "Regati pst 1" "11911" {:scheme :ee-legal-form :code "Osaühing" :label "Osaühing"}]
+           [(:entity/status a) (:entity/registered-on a) (get-in a [:entity/address :street])
+            (get-in a [:entity/address :postal-code]) (:entity/legal-form a)]))
+    (is (= [:inactive :inactive] [(:entity/status b) (:entity/status c)]))
+    (testing "個人事業主は取り込まない"
+      (is (= [{:index 3 :skip "füüsilisest isikust ettevõtja（個人事業主）"}] (:skipped res))))
+    (testing "負の対照: 6 桁コードは拒否"
+      (is (= [4] (map :index (:rejected res)))))))
+
+;; --- CZ -------------------------------------------------------------------
+
+(def cz-subjekty
+  [{:ico "99900017" :obchodniJmeno "Fiktivní společnost s ručením omezeným"
+    :sidlo {:kodStatu "CZ" :nazevUlice "Fiktivní ulice" :cisloDomovni 11
+            :nazevObce "Testná" :nazevKraje "Testní kraj" :psc 11000}
+    :pravniForma "112" :datumVzniku "2001-02-03" :datumAktualizace "2026-11-01"}
+   {:ico "99900025" :obchodniJmeno "Fiktivní akciová společnost"
+    :sidlo {:kodStatu "CZ" :textovaAdresa "Testní adresa 2, Testná"
+            :nazevObce "Testná" :psc "12000"}
+    :pravniForma "121" :datumVzniku "1990-01-01" :datumZaniku "2026-10-31"}
+   {:ico "99900033" :obchodniJmeno "Jan Fiktivní"
+    :sidlo {:kodStatu "CZ" :nazevObce "Testná"}
+    :pravniForma "101" :datumVzniku "2005-06-07"}
+   {:ico "424" :obchodniJmeno "Cizí Fiktivní"
+    :pravniForma "424"}
+   {:ico "99900018" :obchodniJmeno "BAD ICO SPOLEČNOST"
+    :pravniForma "112"}])
+
+(deftest cz-ares
+  (let [res (collect/collect catalog :cz-ares cz-subjekty)
+        [a b] (:records res)]
+    (is (= ["cz-ares:99900017" "cz-ares:99900025"] (map :entity/id (:records res))))
+    (is (every? schema/valid? (:records res)))
+    (is (= [:active "2001-02-03" "Fiktivní ulice 11" "Testná" "11000"
+            {:scheme :cz-pravni-forma :code "112" :label "Společnost s ručením omezeným"}]
+           [(:entity/status a) (:entity/registered-on a) (get-in a [:entity/address :street])
+            (get-in a [:entity/address :locality]) (get-in a [:entity/address :postal-code])
+            (:entity/legal-form a)]))
+    (is (= [:closed "2026-10-31" "Testní adresa 2, Testná"]
+           [(:entity/status b) (:entity/closed-on b) (get-in b [:entity/address :street])]))
+    (testing "個人事業主（101・424）は取り込まない"
+      (is (= [2 3] (map :index (:skipped res))))
+      (is (not-any? #(str/includes? (pr-str %) "Jan Fiktivní") (:records res))))
+    (testing "負の対照: 検査数字不一致"
+      (is (= [4] (map :index (:rejected res)))))))
+
+;; --- CH -------------------------------------------------------------------
+
+(def ch-companies
+  [{:name "Fictional Widgets AG" :uid "CHE-999.000.019"
+    :legalForm {:id 1 :uid "0106" :name {:de "Aktiengesellschaft" :en "Limited company"}}
+    :status "ACTIVE" :sogcDate "2026-10-01" :canton "ZH"
+    :address {:street "Fiktivstrasse" :houseNumber "11" :city "Testdorf" :swissZipCode "8000"}}
+   {:name "Fictional Holding GmbH" :uid "CHE-999.000.025"
+    :legalForm {:id 2 :uid "0107" :name {:de "Gesellschaft mit beschränkter Haftung"}}
+    :status "BEING_CANCELLED"}
+   {:name "Fictional Old Stiftung" :uid "CHE-999.000.031"
+    :legalForm {:id 3 :uid "0110" :name {:de "Stiftung"}}
+    :status "CANCELLED" :deletionDate "2026-09-30"}
+   {:name "Hans Fiktivi" :uid "CHE-109.322.551"
+    :legalForm {:id 4 :uid "0101" :name {:de "Einzelunternehmen"}}
+    :status "ACTIVE"}
+   {:name "BAD UID AG" :uid "CHE-999.000.010"
+    :legalForm {:id 1 :uid "0106" :name {:de "Aktiengesellschaft"}}
+    :status "ACTIVE"}])
+
+(deftest ch-zefix
+  (let [res (collect/collect catalog :ch-zefix ch-companies)
+        [a b c] (:records res)]
+    (is (= ["ch-zefix:CHE-999000019" "ch-zefix:CHE-999000025" "ch-zefix:CHE-999000031"]
+           (map :entity/id (:records res))))
+    (is (every? schema/valid? (:records res)))
+    (is (= [:active "Fiktivstrasse 11" "Testdorf" "ZH" "8000" "0106" "Aktiengesellschaft"]
+           [(:entity/status a) (get-in a [:entity/address :street]) (get-in a [:entity/address :locality])
+            (get-in a [:entity/address :region]) (get-in a [:entity/address :postal-code])
+            (get-in a [:entity/legal-form :code]) (get-in a [:entity/legal-form :label])]))
+    (is (= [:inactive :closed "2026-09-30"] [(:entity/status b) (:entity/status c) (:entity/closed-on c)]))
+    (testing "個人事業（0101）は取り込まない"
+      (is (= [{:index 3 :skip "Einzelunternehmen（個人事業）"}] (:skipped res))))
+    (testing "負の対照: UID 検査数字不一致"
+      (is (= [4] (map :index (:rejected res)))))))
+
 ;; --- カタログ -------------------------------------------------------------
 
 (deftest europe-catalog
   (let [by-id (into {} (map (juxt :id identity) catalog))]
-    (testing "利用条件と仕様を確認した 4 ソースだけ実装済み"
-      (doseq [id [:gb-companies-house :fr-sirene :no-brreg :fi-prh]]
+    (testing "利用条件と仕様を確認した 7 ソースだけ実装済み"
+      (doseq [id [:gb-companies-house :fr-sirene :no-brreg :fi-prh :ee-ariregister :cz-ares :ch-zefix]]
         (is (= :implemented (get-in by-id [id :status])) (name id))
         (is (every? (by-id id) [:license :url :terms-verified-on :parser]) (name id))))
     (testing "確認できなかったソースは受け付けない"
-      (doseq [id [:dk-cvr :ee-ariregister :be-kbo :cz-ares :ch-zefix :nl-kvk]]
+      (doseq [id [:dk-cvr :be-kbo :nl-kvk]]
         (is (not= :implemented (get-in by-id [id :status])) (name id))
         (is (string? (get-in by-id [id :blocked-reason])) (name id))
         (is (:error (collect/collect catalog id [])) (name id))))))
 
 (deftest csv-rows
   (is (= [{"a" "1" "b" "2"} {:reject "列数が 1（見出しは 2）"}] (csv/rows ["a, b" "1,2" "3"])))
-  (is (= [] (csv/rows ["a,b"]))))
+  (is (= [] (csv/rows ["a,b"])))
+  (testing "; 区切りと BOM"
+    (is (= [{"a" "1" "b" "2"}] (csv/rows [(str (char 0xFEFF) "a;b") "1;2"] \;)))))

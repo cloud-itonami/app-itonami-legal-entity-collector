@@ -32,6 +32,9 @@
    :au-acn ids/au-acn?
    :ca-corporation-number ids/ca-corporation-number?
    :ca-business-number ids/ca-business-number?
+   :cz-ico ids/cz-ico?
+   :ch-uid ids/ch-uid?
+   :ee-registry-code ids/ee-registry-code?
    :registration-number #(and (string? %) (<= 1 (count %) 64))})
 
 (defn identifier-problems [{:keys [scheme value]}]

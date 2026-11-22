@@ -105,6 +105,35 @@
   [s]
   (digits? s 9))
 
+(defn cz-ico?
+  "チェコの IČO（8 桁）。先頭 7 桁に 8,7,6,5,4,3,2 を掛けた和を 11 で割る。
+  余り 0 → 1、余り 1 → 0、それ以外 → 11 - 余り。"
+  [s]
+  (and (digits? s 8)
+       (let [ds (map digit (take 7 s))
+             r (mod (weighted-sum [8 7 6 5 4 3 2] ds) 11)
+             check (case r 0 1 1 0 (- 11 r))]
+         (= check (digit (nth s 7))))))
+
+(defn ch-uid?
+  "スイスの UID（CHE- + 9 桁）。先頭 8 桁に 5,4,3,2,7,6,5,4 を掛けた和を 11 で割る。
+  11 - 余りが検査数字。補数が 10 のものは発行されない（eCH-0097 2.4.2）。
+  ドット・ハイフンの有無はどちらでも受ける。"
+  [s]
+  (and (string? s)
+       (let [m (re-matches #"CHE-?([0-9]{3})\.?([0-9]{3})\.?([0-9]{3})" s)]
+         (boolean
+          (when m
+            (let [ds (str (nth m 1) (nth m 2) (nth m 3))
+                  r (mod (weighted-sum [5 4 3 2 7 6 5 4] (map digit (take 8 ds))) 11)
+                  check (case r 0 0 (- 11 r))]
+              (and (not= 10 check) (= check (digit (nth ds 8))))))))))
+
+(defn ee-registry-code?
+  "エストニアの äriregistri kood（8 桁の数字）。検査数字は確かめない。"
+  [s]
+  (digits? s 8))
+
 (defn country-code?
   "ISO 3166-1 alpha-2 の形（大文字 2 文字）。実在の国かまでは見ない。"
   [s]

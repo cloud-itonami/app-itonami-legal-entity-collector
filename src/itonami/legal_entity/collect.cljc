@@ -3,7 +3,10 @@
   取得（ダウンロード）はここでは行わない。呼び出し側が取得済みの入力を渡す。"
   (:require [itonami.legal-entity.au-abr :as au-abr]
             [itonami.legal-entity.ca-ised :as ca-ised]
+            [itonami.legal-entity.ch-zefix :as ch-zefix]
             [itonami.legal-entity.csv :as csv]
+            [itonami.legal-entity.cz-ares :as cz-ares]
+            [itonami.legal-entity.ee-ariregister :as ee-ariregister]
             [itonami.legal-entity.fi-prh :as fi-prh]
             [itonami.legal-entity.fr-sirene :as fr-sirene]
             [itonami.legal-entity.gb-companies-house :as gb-ch]
@@ -14,7 +17,8 @@
 
 (def parsers
   "実装済みのソース → {:input 入力の形, :parse 1 件を {:record}/{:skip}/{:reject} にする関数}。
-  :lines は見出しのない CSV の行、:csv-with-header は先頭行が見出しの CSV の行、:maps は JSON の要素。"
+  :lines は見出しのない CSV の行、:csv-with-header は先頭行が見出しの CSV の行（カンマ区切り）、
+  :csv-semicolon は ; 区切り、:maps は JSON の要素。"
   {:gleif {:input :maps :parse gleif/normalize}
    :jp-nta {:input :lines :parse jp-nta/parse-line}
    :gb-companies-house {:input :csv-with-header :parse gb-ch/normalize}
@@ -23,7 +27,10 @@
    :fi-prh {:input :maps :parse fi-prh/normalize}
    :us-sec-edgar {:input :maps :parse us-sec-edgar/normalize}
    :ca-ised {:input :csv-with-header :parse ca-ised/normalize}
-   :au-abr {:input :maps :parse au-abr/normalize}})
+   :au-abr {:input :maps :parse au-abr/normalize}
+   :ee-ariregister {:input :csv-semicolon :parse ee-ariregister/normalize}
+   :cz-ares {:input :maps :parse cz-ares/normalize}
+   :ch-zefix {:input :maps :parse ch-zefix/normalize}})
 
 (defn collect
   "catalog はソースカタログ（sources/catalog.edn）、inputs は取得済みの入力の列。
@@ -37,7 +44,9 @@
       (nil? (:terms-verified-on entry)) {:source source-id :error "利用条件が未確認のソース"}
       (nil? parse) {:source source-id :error "parser がない"}
       :else
-      (let [items (if (= :csv-with-header input) (csv/rows inputs) inputs)
+      (let [items (cond (= :csv-with-header input) (csv/rows inputs)
+                        (= :csv-semicolon input) (csv/rows inputs \;)
+                        :else inputs)
             results (map-indexed (fn [i x] (assoc (parse x) :index i)) items)]
         {:source source-id
          :records (vec (keep :record results))

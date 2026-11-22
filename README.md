@@ -2,7 +2,7 @@
 
 公開一次情報（各国の法人登記・GLEIF）から法人データを集め、出典つきの共通スキーマに正規化する Itonami profile です。D&B・帝国データバンク・Moody's の契約データに頼らない、Awai Network の自前の企業データ基盤の収集側にあたります（Linear AWAI-3186）。
 
-## いまあるもの（2026-11-18 時点）
+## いまあるもの（2026-11-23 時点）
 
 | 部分 | 状態 |
 |---|---|
@@ -11,7 +11,8 @@
 | GLEIF（API の lei-records 形式、CC0 1.0） | 実装・架空データでテスト済み |
 | 国税庁 法人番号（全件・差分 CSV、リソース定義書 4.1 版の 30 列） | 実装・架空データでテスト済み |
 | 英国 Companies House・フランス SIRENE・ノルウェー Brønnøysund・フィンランド PRH（AWAI-3224） | 実装・架空データでテスト済み。個人事業主・部分公開は取り込まない |
-| デンマーク・エストニア・ベルギー・チェコ・スイス・オランダ | 受け付けない。確認できなかった理由は `sources/catalog.edn` の `:blocked-reason` |
+| エストニア e-Business Register（CC BY 4.0、lihtandmed CSV、;区切り）・チェコ ARES（REST、500 件/分）・スイス Zefix（OGD、Basic 認証は申請制）（AWAI-3224 残り） | 実装・架空データでテスト済み。個人事業主は取り込まない。Zefix は `:key-required? true` |
+| デンマーク・ベルギー・オランダ（AWAI-3224 残り） | 受け付けない。理由は `sources/catalog.edn` の `:blocked-reason`（DK：申請と文書モデルの確認待ち。BE：無償だが登録・ライセンス受付と目的限定で owner 判断要。NL：無償データに名称がなく、有償 API は owner 判断要） |
 | 米国 SEC EDGAR・カナダ Corporations Canada・オーストラリア ABR（AWAI-3225） | 実装・架空データでテスト済み。個人の filer・個人事業主・信託は取り込まない。ABR の XML から map への変換は未実装 |
 | ブラジル・ニュージーランド・南アフリカ・イスラエル | 受け付けない。確認できなかった理由は `sources/catalog.edn` の `:blocked-reason` |
 | 取得（ダウンロード） | 未実装。parser は取得済みの入力を受け取るだけ |
