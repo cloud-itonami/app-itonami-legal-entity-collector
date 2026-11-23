@@ -6,6 +6,7 @@
             [itonami.legal-entity.collect :as collect]
             [itonami.legal-entity.csv :as csv]
             [itonami.legal-entity.cz-ares :as cz]
+            [itonami.legal-entity.ee-ariregister :as ee]
             [itonami.legal-entity.fi-prh :as fi]
             [itonami.legal-entity.fr-sirene :as fr]
             [itonami.legal-entity.gb-companies-house :as gb]
@@ -220,6 +221,50 @@
     (testing "負の対照: 6 桁コードは拒否"
       (is (= [4] (map :index (:rejected res)))))))
 
+(deftest ee-empty-response
+  "空のレスポンス（空文字列・空行のみ）では記録ができない。"
+  (testing "空文字列は行を生まない（行数不足）"
+    (is (= [] (vec (csv/rows [""] \;)))))
+  (testing "空の map を normalize すると problems が拒否される"
+    (let [r (ee/normalize {})]
+      (is (string? (:reject r)) "空行は problems として検出される")
+      (is (str/includes? (:reject r) "entity"))))
+  (testing "見出しだけでは記録も拒否も生まない"
+    (let [res (collect/collect catalog :ee-ariregister [ee-header])]
+      (is (= [] (:records res)))
+      (is (= [] (:rejected res)))))
+  (testing "空行は collect で 1 件拒否（problems）になる"
+    (let [res (collect/collect catalog :ee-ariregister [ee-header ""])]
+      (is (= [] (:records res)))
+      (is (= 1 (count (:rejected res))))
+      (is (str/includes? (:reject (first (:rejected res))) "entity")))))
+
+(deftest ee-column-mismatch
+  "17 列でない行は列数不足として拒否される。"
+  (is (= [{:reject "列数が 3（見出しは 17）"}]
+         (vec (csv/rows [ee-header "a;b;c"] \;))))
+  (let [res (collect/collect catalog :ee-ariregister [ee-header "a;b;c"])]
+    (is (= [] (:records res)) "列数不一致の行は記録にならない")
+    (is (= 1 (count (:rejected res))))) )
+
+(deftest ee-bom-csv
+  "BOM 付き CSV は最初の列名に BOM が混入せず正常にパースされる。"
+  (let [rows (csv/rows [(str (char 0xFEFF) ee-header) (first (rest ee-lines))] \;)]
+    (is (= 1 (count rows)))
+    (is (= "FICTIVE HOLDING OÜ" (get (first rows) "nimi")) "BOM が列名に残らない"))
+  (let [res (collect/collect catalog :ee-ariregister [(str (char 0xFEFF) ee-header) (first (rest ee-lines))])]
+    (is (= ["ee-ariregister:99999999"] (map :entity/id (:records res))))))
+
+(deftest ee-semicolon-rows
+  "; 区切りの正例を csv/rows のレベルで確かめる（見出し 17 列に拆解される）。"
+  (let [rows (csv/rows [ee-header (first (rest ee-lines))] \;)]
+    (is (= 1 (count rows)))
+    (let [m (first rows)]
+      (is (= 17 (count (keys m))))
+      (is (= "FICTIVE HOLDING OÜ" (get m "nimi")))
+      (is (= "99999999" (get m "ariregistri_kood")))
+      (is (= "Osaühing" (get m "ettevotja_oiguslik_vorm"))))))
+
 ;; --- CZ -------------------------------------------------------------------
 
 ;; 項目名は 2026-11-23 に取得した OpenAPI 定義（v1.4.0）の EconomickySubjekt / Adresa どおり。
@@ -365,6 +410,41 @@
         (is (= 1 calls) (str s))
         (is (= [] sleeps) (str s))
         (is (= {:status s :attempts 1 :waited-ms 0} result) (str s))))))
+
+(deftest cz-ares-rate-window
+  "trailing 60 秒で 500 件を超えない（fake clock は sleep の分だけ進み、送信回数を数える）。"
+  (let [state (cz/new-request-state)
+        clock (atom 0) sleeps (atom []) times (atom [])
+        req (fn [] (swap! times conj @clock) {:status 200 :body {:ok true}})
+        sleep (fn [ms] (swap! sleeps conj ms) (swap! clock + ms))
+        now (fn [] @clock)]
+    (dotimes [_ 501]
+      (cz/request-with-retry req sleep now {:state state}))
+    (is (= 501 (count @times)) "501 件すべて送る（止めずに待つ）")
+    (is (= [60000] @sleeps) "500 件で window が満杯になり、古い試行が窓から外れるまで待つ")
+    (is (= 60000 (last @times)) "501 件目は窓の外で送られる")
+    (is (every? (fn [i]
+                  (let [t (nth @times i)]
+                    (<= (count (filter #(< % (+ t cz/rate-window-ms)) (drop i @times)))
+                        cz/max-requests-per-minute)))
+                (range (count @times)))
+        "いずれの 60 秒窓でも 500 件を超えない")))
+
+(deftest cz-ares-dedupe
+  "同一照会の反復をしない（2回目は request-fn を呼ばずキャッシュを返す）。"
+  (let [state (cz/new-request-state)
+        clock (atom 0) sleeps (atom []) calls (atom 0)
+        req (fn [] (swap! calls inc) {:status 200 :body {:ok true}})
+        sleep (fn [ms] (swap! sleeps conj ms) (swap! clock + ms))
+        now (fn [] @clock)
+        r1 (cz/request-with-retry req sleep now {:state state :request-key "ico:99900009"})
+        r2 (cz/request-with-retry req sleep now {:state state :request-key "ico:99900009"})
+        r3 (cz/request-with-retry req sleep now {:state state :request-key "ico:99900017"})]
+    (is (= {:ok true} r1))
+    (is (= r1 r2) "2回目はキャッシュを返す")
+    (is (= 2 @calls) "2回目は送らず、別の対象は送る")
+    (is (= [] @sleeps) "レート待機なし")
+    (is (= 2 (count (:call-times @state))) "キャッシュヒットは送信時刻に数えない")))
 
 ;; --- カタログ -------------------------------------------------------------
 

@@ -159,30 +159,59 @@
     (max 0 (- min-interval-ms (- now-ms last-attempt-ms)))
     0))
 
+(defn new-request-state
+  "request-with-retry の状態（送信時刻の履歴と照会キャッシュを持つ atom）。呼び出し側が保持して :state で渡す。"
+  []
+  (atom {:call-times [] :cache {}}))
+
+(defn- invoke-with-retry
+  "内部実装。state は確定済みで、キャッシュヒットは済んでいる（request-key の結果は呼び出し側で記録する）。"
+  [state request-fn sleep-fn now-fn]
+  (let [result (loop [attempt 1 waited 0 last-attempt nil]
+                 (let [tw (throttle-wait-ms (now-fn) (:call-times @state))]
+                   (when (pos? tw)
+                     (sleep-fn tw))
+                   (let [started (now-fn)]
+                     (swap! state update :call-times conj started)
+                     (let [resp (request-fn)
+                           status (:status resp)]
+                       (cond
+                         (success-status? status) (:body resp)
+                         (not (retryable-status? status)) {:status status :attempts attempt :waited-ms waited}
+                         :else
+                         (let [backoff (backoff-ms attempt)]
+                           (if (nil? backoff)
+                             {:status status :attempts attempt :waited-ms waited}
+                             (let [wait (max backoff (interval-wait-ms last-attempt (now-fn)))]
+                               (if (> (+ waited wait) max-total-wait-ms)
+                                 {:status status :attempts attempt :waited-ms waited}
+                                 (do (when (pos? wait)
+                                       (sleep-fn wait))
+                                     (recur (inc attempt)
+                                            (+ waited wait)
+                                            started)))))))))))]
+    result))
+
 (defn request-with-retry
   "request-fn（引数なしで {:status s :body b} を返す）を 429 と 5xx の間だけ最大 4 回再試行する。
   待機は指数バックオフ（1s → 2s → 4s → 8s）と、同 request-fn への次回呼び出しまでの
   120ms 間隔のうち長い方とし、総待機は 30000ms を超えたら再試行を止める。
+  さらに trailing 60 秒で 500 件を超えないよう、送信前に window 内の件数を数え、
+  500 以上なら最も古い試行が 60 秒窓から外れるまで sleep する（レート待機は上記の
+  バックオフ総待機の上限とは別枠）。
+  同一の照会（opts の :request-key。呼び出し側が正規化済みの対象 URL やパラメータ文字列を渡す）の
+  反復はしない。:request-key の結果（成功の body / 失敗の {:status ...}）を :state に保持し、
+  2回目以降は送らずにキャッシュを返す。:state を渡さなければ呼び出しごとに空の状態で動き、
+  呼び出しをまたいだレート制限・重複防止は効かない。
   request-fn・sleep-fn（待機ミリ秒）・now-fn（現在時刻ミリ秒）はすべて引数で注入する。
   この namespace が直接ファイル・ネットワーク・時計に触れることはない。
   成功時（2xx）は body をそのまま返す。失敗は {:status :attempts :waited-ms} で返す。"
-  [request-fn sleep-fn now-fn]
-  (loop [attempt 1 waited 0 last-attempt nil]
-    (let [started (now-fn)
-          resp (request-fn)
-          status (:status resp)]
-      (cond
-        (success-status? status) (:body resp)
-        (not (retryable-status? status)) {:status status :attempts attempt :waited-ms waited}
-        :else
-        (let [backoff (backoff-ms attempt)]
-          (if (nil? backoff)
-            {:status status :attempts attempt :waited-ms waited}
-            (let [wait (max backoff (interval-wait-ms last-attempt (now-fn)))]
-              (if (> (+ waited wait) max-total-wait-ms)
-                {:status status :attempts attempt :waited-ms waited}
-                (do (when (pos? wait)
-                      (sleep-fn wait))
-                    (recur (inc attempt)
-                           (+ waited wait)
-                           started))))))))))
+  [request-fn sleep-fn now-fn & [{:keys [request-key state]}]]
+  (let [state (or state (new-request-state))]
+    (if (and (some? request-key)
+             (contains? (:cache @state) request-key))
+      (get (:cache @state) request-key)
+      (let [result (invoke-with-retry state request-fn sleep-fn now-fn)]
+        (when (some? request-key)
+          (swap! state assoc-in [:cache request-key] result))
+        result))))
