@@ -479,6 +479,23 @@
         (is (string? (get-in by-id [id :blocked-reason])) (name id))
         (is (:error (collect/collect catalog id [])) (name id))))))
 
+(deftest cz-ares-retry-terms
+  "catalog の :retry 条項と実装の対応を固定する（条項だけ書いて実装が無い状態を許さない）。"
+  (let [retry (get-in (into {} (map (juxt :id identity) catalog)) [:cz-ares :access-conditions :retry])]
+    (is (string? retry))
+    (testing "数と順序が実装の定数と一致する"
+      (is (str/includes? retry "上限4回"))
+      (is (str/includes? retry "1s→2s→4s→8s"))
+      (is (= 4 cz/max-retries))
+      (is (= [1000 2000 4000 8000] cz/backoff-schedule-ms))
+      (is (= 30000 cz/max-total-wait-ms))
+      (is (= 500 cz/max-requests-per-minute)))
+    (testing "取得側の責務（この parser は通信しない）と、守る関数名・テスト名が書かれている"
+      (is (str/includes? retry "純粋"))
+      (is (str/includes? retry "request-with-retry"))
+      (is (str/includes? retry ":request-key"))
+      (is (str/includes? retry "cz-ares-retry")))))
+
 (deftest csv-rows
   (is (= [{"a" "1" "b" "2"} {:reject "列数が 1（見出しは 2）"}] (csv/rows ["a, b" "1,2" "3"])))
   (is (= [] (csv/rows ["a,b"])))
