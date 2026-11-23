@@ -14,7 +14,8 @@
 | 国税庁 法人番号（全件・差分 CSV、リソース定義書 4.1 版の 30 列） | 実装・架空データでテスト済み |
 | 英国 Companies House・フランス SIRENE・ノルウェー Brønnøysund・フィンランド PRH（AWAI-3224） | 実装・架空データでテスト済み。個人事業主・部分公開は取り込まない |
 | エストニア e-Business Register（CC BY 4.0、lihtandmed CSV、;区切り） | 実装・架空データでテスト済み。個人事業主は取り込まない |
-| デンマーク・ベルギー・チェコ・スイス・オランダ | 受け付けない。確認できなかった理由は `sources/catalog.edn` の `:blocked-reason` |
+| チェコ ARES（REST API、公開でキー不要。運用条件のもと無償で使える） | 実装・架空データでテスト済み。個人事業主（pravniForma 100-109・424・425）は取り込まない。照会は 500 件/分に抑える |
+| デンマーク・ベルギー・スイス・オランダ | 受け付けない。確認できなかった理由は `sources/catalog.edn` の `:blocked-reason` |
 | 米国 SEC EDGAR・カナダ Corporations Canada・オーストラリア ABR（AWAI-3225） | 実装・架空データでテスト済み。個人の filer・個人事業主・信託は取り込まない。ABR の XML から map への変換は未実装 |
 | ブラジル・ニュージーランド・南アフリカ・イスラエル | 受け付けない。確認できなかった理由は `sources/catalog.edn` の `:blocked-reason` |
 | 取得（ダウンロード） | 未実装。parser は取得済みの入力を受け取るだけ |

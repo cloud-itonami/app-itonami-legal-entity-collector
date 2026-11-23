@@ -21,12 +21,16 @@
 (deftest identifiers
   (testing "PRH の OpenAPI 定義にある例で検算"
     (is (ids/fi-business-id? "0116297-6")))
+  (testing "CZ IČO（財務省の案内に出た値。公に案内された実例で検算）"
+    (is (ids/cz-ico? "00006947"))
+    (is (ids/cz-ico? "00177041")))
   (testing "架空の値"
     (is (every? ids/fr-siren? ["999900004" "999900012" "999900020"]))
     (is (every? ids/no-orgnr? ["999000002" "999000010" "999000029"]))
     (is (every? ids/fi-business-id? ["9990000-8" "9990001-6" "9990002-4"]))
     (is (ids/gb-company-number? "ZZ000001"))
-    (is (ids/ee-registry-code? "99999999")))
+    (is (ids/ee-registry-code? "99999999"))
+    (is (every? ids/cz-ico? ["99900017" "99900025" "99900033"])))
   (testing "負の対照"
     (is (not (ids/fr-siren? "999900005")))
     (is (not (ids/no-orgnr? "999000003")))
@@ -34,7 +38,9 @@
     (is (not (ids/fi-business-id? "99900008")) "ハイフンなし")
     (is (not (ids/gb-company-number? "zz000001")))
     (is (not (ids/gb-company-number? "ZZ00001")) "7 文字")
-    (is (not (ids/ee-registry-code? "9999999")) "7 桁")))
+    (is (not (ids/ee-registry-code? "9999999")) "7 桁")
+    (is (not (ids/cz-ico? "99900018")))
+    (is (not (ids/cz-ico? "9990001")) "7 桁")))
 
 ;; --- GB -------------------------------------------------------------------
 
@@ -207,16 +213,56 @@
     (testing "負の対照: 6 桁コードは拒否"
       (is (= [4] (map :index (:rejected res)))))))
 
+;; --- CZ -------------------------------------------------------------------
+;; 入力は OpenAPI の EkonomickySubjekt（ico, obchodniJmeno, sidlo{...}, pravniForma,
+;; datumVzniku, datumZaniku）。2026-11-23 取得の api-docs で項目名を確認済み。
+;; 番号はチェックデジットだけ正しい架空値（99900017 等）。
+
+(def cz-subjekty
+  [{:ico "99900017" :obchodniJmeno "Fiktivní společnost s ručením omezeným"
+    :sidlo {:kodStatu "CZ" :nazevUlice "Fiktivní ulice" :cisloDomovni 11
+            :nazevObce "Testná" :nazevKraje "Testní kraj" :psc 11000}
+    :pravniForma "112" :datumVzniku "2001-02-03" :datumAktualizace "2026-11-01"}
+   {:ico "99900025" :obchodniJmeno "Fiktivní akciová společnost"
+    :sidlo {:kodStatu "CZ" :textovaAdresa "Testní adresa 2, Testná"
+            :nazevObce "Testná" :psc "12000"}
+    :pravniForma "121" :datumVzniku "1990-01-01" :datumZaniku "2026-10-31"}
+   {:ico "99900033" :obchodniJmeno "Jan Fiktivní"
+    :sidlo {:kodStatu "CZ" :nazevObce "Testná"}
+    :pravniForma "101" :datumVzniku "2005-06-07"}
+   {:ico "424" :obchodniJmeno "Cizí Fiktivní"
+    :pravniForma "424"}
+   {:ico "99900018" :obchodniJmeno "BAD ICO SPOLEČNOST"
+    :pravniForma "112"}])
+
+(deftest cz-ares
+  (let [res (collect/collect catalog :cz-ares cz-subjekty)
+        [a b] (:records res)]
+    (is (= ["cz-ares:99900017" "cz-ares:99900025"] (map :entity/id (:records res))))
+    (is (every? schema/valid? (:records res)))
+    (is (= [:active "2001-02-03" "Fiktivní ulice 11" "Testná" "11000"
+            {:scheme :cz-pravni-forma :code "112" :label "Společnost s ručením omezeným"}]
+           [(:entity/status a) (:entity/registered-on a) (get-in a [:entity/address :street])
+            (get-in a [:entity/address :locality]) (get-in a [:entity/address :postal-code])
+            (:entity/legal-form a)]))
+    (is (= [:closed "2026-10-31" "Testní adresa 2, Testná"]
+           [(:entity/status b) (:entity/closed-on b) (get-in b [:entity/address :street])]))
+    (testing "個人事業主（101・424）は取り込まない"
+      (is (= [2 3] (map :index (:skipped res))))
+      (is (not-any? #(str/includes? (pr-str %) "Jan Fiktivní") (:records res))))
+    (testing "負の対照: IČO の検査数字不一致"
+      (is (= [4] (map :index (:rejected res)))))))
+
 ;; --- カタログ -------------------------------------------------------------
 
 (deftest europe-catalog
   (let [by-id (into {} (map (juxt :id identity) catalog))]
-    (testing "利用条件と仕様を確認した 5 ソースだけ実装済み"
-      (doseq [id [:gb-companies-house :fr-sirene :no-brreg :fi-prh :ee-ariregister]]
+    (testing "利用条件と仕様を確認した 6 ソースだけ実装済み"
+      (doseq [id [:gb-companies-house :fr-sirene :no-brreg :fi-prh :ee-ariregister :cz-ares]]
         (is (= :implemented (get-in by-id [id :status])) (name id))
         (is (every? (by-id id) [:license :url :terms-verified-on :parser]) (name id))))
     (testing "確認できなかったソースは受け付けない"
-      (doseq [id [:dk-cvr :be-kbo :cz-ares :ch-zefix :nl-kvk]]
+      (doseq [id [:dk-cvr :be-kbo :ch-zefix :nl-kvk]]
         (is (not= :implemented (get-in by-id [id :status])) (name id))
         (is (string? (get-in by-id [id :blocked-reason])) (name id))
         (is (:error (collect/collect catalog id [])) (name id))))))

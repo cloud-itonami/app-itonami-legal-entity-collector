@@ -4,6 +4,7 @@
   (:require [itonami.legal-entity.au-abr :as au-abr]
             [itonami.legal-entity.ca-ised :as ca-ised]
             [itonami.legal-entity.csv :as csv]
+            [itonami.legal-entity.cz-ares :as cz-ares]
             [itonami.legal-entity.ee-ariregister :as ee-ariregister]
             [itonami.legal-entity.fi-prh :as fi-prh]
             [itonami.legal-entity.fr-sirene :as fr-sirene]
@@ -26,6 +27,7 @@
    :us-sec-edgar {:input :maps :parse us-sec-edgar/normalize}
    :ca-ised {:input :csv-with-header :parse ca-ised/normalize}
    :au-abr {:input :maps :parse au-abr/normalize}
+   :cz-ares {:input :maps :parse cz-ares/normalize}
    :ee-ariregister {:input :csv-semicolon :parse ee-ariregister/normalize}})
 
 (defn collect

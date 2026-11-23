@@ -105,6 +105,17 @@
   [s]
   (digits? s 9))
 
+(defn cz-ico?
+  "チェコの IČO（8 桁）。先頭 7 桁に 8,7,6,5,4,3,2 を掛けた和を 11 で割る。
+  余り 0 → 1、余り 1 → 0、それ以外 → 11 - 余り。
+  例 00006947、00177041（財務省の IČO 案内に出た値）。架空値 99900017（fictional）も通る。"
+  [s]
+  (and (digits? s 8)
+       (let [ds (map digit (take 7 s))
+             r (mod (weighted-sum [8 7 6 5 4 3 2] ds) 11)
+             check (case r 0 1 1 0 (- 11 r))]
+         (= check (digit (nth s 7))))))
+
 (defn ee-registry-code?
   "エストニアの äriregistri kood（8 桁の数字）。検査数字は確かめない。"
   [s]
