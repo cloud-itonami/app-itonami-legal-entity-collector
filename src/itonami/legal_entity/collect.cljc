@@ -2,6 +2,7 @@
   "ソースごとの parser を呼び、受理・除外・拒否を集計する。
   取得（ダウンロード）はここでは行わない。呼び出し側が取得済みの入力を渡す。"
   (:require [itonami.legal-entity.au-abr :as au-abr]
+            [itonami.legal-entity.br-cnpj :as br-cnpj]
             [itonami.legal-entity.ca-ised :as ca-ised]
             [itonami.legal-entity.csv :as csv]
             [itonami.legal-entity.cz-ares :as cz-ares]
@@ -28,7 +29,9 @@
    :ca-ised {:input :csv-with-header :parse ca-ised/normalize}
    :au-abr {:input :maps :parse au-abr/normalize}
    :ee-ariregister {:input :csv-semicolon :parse ee-ariregister/normalize}
-   :cz-ares {:input :maps :parse cz-ares/normalize}})
+   :cz-ares {:input :maps :parse cz-ares/normalize}
+   ;; :br-cnpj は :planned のまま（catalog の :status が :implemented でないため collect は error を返す）
+   :br-cnpj {:input :lines :parse br-cnpj/parse-line}})
 
 (defn collect
   "catalog はソースカタログ（sources/catalog.edn）、inputs は取得済みの入力の列。

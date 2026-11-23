@@ -128,3 +128,29 @@
 (defn iso-date?
   [s]
   (and (string? s) (boolean (re-matches #"\d{4}-\d{2}-\d{2}" s))))
+
+
+;; --- BR CNPJ ----------------------------------------------------------------
+
+(defn cnpj-base?
+  "Receita Federal CNPJ の BÁSICO（8 桁）。Empresas ファイルが持つのはこの部分だけ。
+  単体ではチェックディジットを検証できない（完全な 14 桁は Estabelecimentos の ordem + DV との結合を要する）。"
+  [s]
+  (digits? s 8))
+
+(defn- cnpj-dv
+  "CNPJ の検査数字。重みで加重和を取り 11 で割った余りから求める（余り 0・1 は 0、他は 11−余り）。"
+  [ds weights]
+  (let [r (mod (weighted-sum weights ds) 11)]
+    (if (< r 2) 0 (- 11 r))))
+
+(defn cnpj14?
+  "Receita Federal CNPJ の完全な 14 桁。先頭 12 桁に重み 5..2 の検査数字（13 桁目）、
+  先頭 13 桁に重み 6..2 の検査数字（14 桁目）を置く MOD 11 法。全桁が同一の番号は無効。
+  架空の値での検算は test の br-cnpj-ids を参照（公開例 11.222.333/0001-81 で検算済み）。"
+  [s]
+  (and (digits? s 14)
+       (not (apply = s))
+       (let [ds (mapv digit s)]
+         (and (= (cnpj-dv (subvec ds 0 12) [5 4 3 2 9 8 7 6 5 4 3 2]) (nth ds 12))
+              (= (cnpj-dv (subvec ds 0 13) [6 5 4 3 2 9 8 7 6 5 4 3 2]) (nth ds 13))))))

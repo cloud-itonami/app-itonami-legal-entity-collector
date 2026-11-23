@@ -3,6 +3,7 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [itonami.legal-entity.br-cnpj :as br-cnpj]
             [itonami.legal-entity.collect :as collect]
             [itonami.legal-entity.ids :as ids]
             [itonami.legal-entity.schema :as schema]))
@@ -151,3 +152,80 @@
       (is (= :planned (:status e)))
       (is (string? (:blocked-reason e)) (str id " に止めた理由がない"))
       (is (= "未実装のソース" (:error (collect/collect catalog id [])))))))
+
+;; --- BR CNPJ ----------------------------------------------------------------
+;; 内部利用のみ（配布不可。:br-cnpj は :planned のまま）。架空データだけを使う。
+;; CNPJ の架空値（チェックディジット正）は Receita MOD 11 で検算した合成値。
+;; 実データの登記情報は fixture にしない。
+
+(deftest br-cnpj-ids
+  (testing "14 桁検証（正）"
+    (is (every? ids/cnpj14? ["99900001000150" "99900002000102" "99900003000220" "12345678000195"])))
+  (testing "14 桁検証（負）"
+    (is (not (ids/cnpj14? "99900001000151")) "検査数字が違う")
+    (is (not (ids/cnpj14? "99900001000140")) "検査数字が違う")
+    (is (not (ids/cnpj14? "9990000100015")) "13 桁")
+    (is (not (ids/cnpj14? "00000000000000")) "全桁同一")
+    (is (not (ids/cnpj14? "9990000100015A")) "数字でない"))
+  (testing "8 桁 base の形式"
+    (is (ids/cnpj-base? "99900001"))
+    (is (not (ids/cnpj-base? "9990000")))
+    (is (not (ids/cnpj-base? "9990000A")))))
+
+(defn- br-line [base razao nat qual capital porte ente]
+  (str/join ";" (map (fn [f] (str "\"" f "\"")) [base razao nat qual capital porte ente])))
+
+(def br-lines
+  [(br-line "99900001" "FICTIONAL REGISTRO COMERCIO LTDA" "2062" "49" "1000000,00" "01" "")
+   (br-line "99900002" "FICTIONAL HOLDINGS SA" "2038" "10" "120000000000,00" "05" "")
+   (br-line "99900003" "FICTIONAL INDIVIDUAL" "2135" "50" "0,00" "01" "")
+   (br-line "ABC" "BAD BASE INC" "2062" "49" "0,00" "05" "")
+   (br-line "99900004" "" "2062" "49" "0,00" "05" "")
+   "\"99900005\";\"TOO FEW\""])
+
+(deftest br-cnpj-parse
+  (testing "実ファイルと同じ形：; 区切り・引用符・見出し行なしで読む。capital のコンマは区切りにならない"
+    (let [[a b] (map br-cnpj/parse-line (take 2 br-lines))]
+      (is (= "FICTIONAL REGISTRO COMERCIO LTDA" (:entity/name (:record a))))
+      (is (= ["br-cnpj:99900001" "br-cnpj:99900002"] (map (comp :entity/id :record) [a b])))
+      (is (= {:scheme :br-cnpj-base :value "99900001"} (first (:entity/identifiers (:record a)))))
+      (is (= {:scheme :br-natureza :code "2038"} (:entity/legal-form (:record b))))
+      (is (= :unknown (:entity/status (:record a))) "Empresas には situation がない")
+      (is (every? schema/valid? (keep :record [a b])))))
+  (testing "latin1 の商号をデコード済みで読む（RAZÃO の Ã は ISO-8859-1 の 0xC3）"
+    (let [name (String. (byte-array [82 65 90 195 79]) "ISO-8859-1")
+          line (br-line "99900006" name "2062" "49" "0,00" "05" "")
+          res (br-cnpj/parse-line line)]
+      (is (= "RAZÃO" (:entity/name (:record res))) "latin1 デコード済みの Ã をそのまま保持")
+      (is (= (str (char 195) "O") (subs (:entity/name (:record res)) 3 5)))))
+  (testing "列数違いは拒否"
+    (is (:reject (br-cnpj/parse-line (nth br-lines 5))))
+    (is (:reject (br-cnpj/parse-line (nth br-lines 3))))
+    (is (:reject (br-cnpj/parse-line (nth br-lines 4))))))
+
+(deftest br-cnpj-personal-excluded
+  (testing "個人データ列を落とす：入力 map に混入した個人キーも出力に現れない"
+    (let [res (br-cnpj/normalize {:cnpj-base "99900009" :razao-social "FICTIONAL CO LTDA"
+                                  :natureza-juridica "2062" :qualificacao-responsavel "49"
+                                  :capital-social "0,00" :porte "05" :ente-federativo ""
+                                  :telefone "11999999999" :email "doe@example.invalid"
+                                  :nome-socio "DOE JANE" :cpf "00000000100"
+                                  :nome-representante "DOE JOHN" :cpf-representante "00000000200"
+                                  :faixa-etaria "5"})]
+      (is (:record res))
+      (is (not (contains? (:record res) :telefone)) "telefone のキーがない")
+      (is (not (contains? (:record res) :email)) "email のキーがない")
+      (is (not (str/includes? (pr-str (:record res)) "DOE")) "氏名・電話・メールが見出しも値もない")
+      (is (not (str/includes? (pr-str (:record res)) "11999999999")) "電話の値がない")
+      (is (schema/valid? (:record res)))))
+  (testing "213-5（Empresário Individual）の行は取り込まない"
+    (is (string? (:skip (br-cnpj/parse-line (nth br-lines 2)))) "2135 は skip")
+    (is (string? (:skip (br-cnpj/normalize {:cnpj-base "99900007" :razao-social "FICTIONAL INDIVIDUAL"
+                                            :natureza-juridica "213-5"}))) "213-5 表記も skip")))
+
+(deftest br-cnpj-deterministic
+  (testing "同じ入力で 2 回実行しても同じ結果"
+    (let [line (first br-lines)
+          m (br-cnpj/row->map line)]
+      (is (= (br-cnpj/parse-line line) (br-cnpj/parse-line line)))
+      (is (= (br-cnpj/normalize m) (br-cnpj/normalize m))))))
