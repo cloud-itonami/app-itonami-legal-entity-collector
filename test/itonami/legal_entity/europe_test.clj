@@ -260,24 +260,34 @@
     (testing "負の対照: チェックデジット不一致、IČO 未割当の icoId"
       (is (= [3 4] (map :index (:rejected res)))))))
 
+(defn- simulate
+  "失敗応答の並びを流し、retry-wait-ms の決定 [{:status :wait-ms|:done?}] を返す。"
+  [statuses]
+  (loop [att 1 [s & rs] statuses acc []]
+    (if (nil? s) acc
+      (let [w (cz/retry-wait-ms {:status s :attempt att})]
+        (if (nil? w)
+          (conj acc {:status s :done? true})
+          (recur (inc att) rs (conj acc {:status s :wait-ms w})))))))
+
 (deftest cz-ares-retry
   "リトライとレート制限（cz_ares.cljc の取得ポリシー、純粋関数）。時刻は注入する。"
-  (testing "失敗 → 再試行 → 上限で止まる"
-    (is (= 1000 (cz/retry-wait-ms {:status 429 :attempt 1})))
-    (is (= 2000 (cz/retry-wait-ms {:status 500 :attempt 2})))
-    (is (= 4000 (cz/retry-wait-ms {:status 503 :attempt 3})))
-    (is (nil? (cz/retry-wait-ms {:status 429 :attempt 4})) "再試行の上限（3 回）で止まる")
-    (is (nil? (cz/retry-wait-ms {:status 500 :attempt 99}))))
-  (testing "対象は 429 と 5xx のみ"
-    (is (every? cz/retryable-status? [429 500 502 599]))
-    (is (not-any? cz/retryable-status? [200 400 401 404 428 600 nil]))
-    (is (nil? (cz/retry-wait-ms {:status 404 :attempt 1})) "対象外は再試行しない")
-    (is (nil? (cz/retry-wait-ms {:status 400 :attempt 1}))))
-  (testing "500 件までは待たず、501 件目は窓の外まで待つ"
+  (testing "① 429 → 再試行 → 成功"
+    (is (= [{:status 429 :wait-ms 1000} {:status 200 :done? true}] (simulate [429 200]))))
+  (testing "② 5xx は指数バックオフで上限（再試行 4 回）まで再試行して止まる"
+    (is (= [{:status 500 :wait-ms 1000} {:status 502 :wait-ms 2000} {:status 503 :wait-ms 4000}
+            {:status 599 :wait-ms 8000} {:status 503 :done? true}]
+           (simulate [500 502 503 599 503])))
+    (is (= 8000 (cz/retry-wait-ms {:status 429 :attempt 4})))
+    (is (nil? (cz/retry-wait-ms {:status 503 :attempt 5})) "上限で止まる"))
+  (testing "③ バックオフの総待機は 30 秒を超えない"
+    (let [ws (keep :wait-ms (simulate [500 502 503 599 503]))]
+      (is (= 15000 (apply + ws)))
+      (is (<= (apply + ws) cz/max-total-wait-ms))))
+  (testing "④ 500 件までは待たず、501 件目は窓の外まで待つ。バーストでも 60 秒窓に 500 件を超えない"
     (is (= 0 (cz/throttle-wait-ms 0 (repeat 499 0))))
     (is (= 60000 (cz/throttle-wait-ms 0 (repeat 500 0))))
-    (is (= 0 (cz/throttle-wait-ms 60000 (repeat 500 0))) "窓の外（境界）の呼び出しは数えない"))
-  (testing "バースト 600 件でも 60 秒窓に 500 件を超えない"
+    (is (= 0 (cz/throttle-wait-ms 60000 (repeat 500 0))) "窓の外（境界）の呼び出しは数えない")
     (let [times (loop [now 0 times [] i 0]
                   (if (>= i 600) times
                     (let [now (+ now (cz/throttle-wait-ms now times))]
@@ -287,10 +297,13 @@
                     (let [t (nth times i)]
                       (<= (count (filter #(< % (+ t cz/rate-window-ms)) (drop i times)))
                           cz/max-requests-per-minute)))
-                  (range (count times))))))
-  (testing "リトライでもスロットルを守る（大きい方の待機）"
+                  (range (count times)))))
     (is (= 60000 (cz/next-wait-ms {:status 429 :attempt 1 :now-ms 0 :call-times (vec (repeat 500 0))})))
-    (is (= 1000 (cz/next-wait-ms {:status 429 :attempt 1 :now-ms 0 :call-times []})))
+    (is (= 1000 (cz/next-wait-ms {:status 429 :attempt 1 :now-ms 0 :call-times []}))))
+  (testing "⑤ 429 以外の 4xx は再試行しない"
+    (is (every? cz/retryable-status? [429 500 502 599]))
+    (is (not-any? cz/retryable-status? [200 400 401 404 428 600 nil]))
+    (is (nil? (cz/retry-wait-ms {:status 404 :attempt 1})))
     (is (nil? (cz/next-wait-ms {:status 404 :attempt 1 :now-ms 0 :call-times []})))))
 
 ;; --- カタログ -------------------------------------------------------------
