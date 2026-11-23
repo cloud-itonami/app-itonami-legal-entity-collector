@@ -72,9 +72,21 @@
   :status :implemented :parser itonami.legal-entity.ee-ariregister}
  {:id :be-kbo :jurisdiction "BE" :registry "KBO/BCE" :status :planned :terms-verified-on nil
   :blocked-reason "KBO Open Data はダウンロードに登録と利用条件への同意が要り、商用の再利用は有償（年 30,000 EUR とする情報あり、二次情報）。公式の利用条件の本文を確認するまで受け付けない。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
- {:id :cz-ares :jurisdiction "CZ" :registry "ARES" :status :planned :terms-verified-on nil
-  :attribution "出所を「ARES」と表示する。照会は 500件/分の上限を守る（Organizer 指定 2026-11-23）"
-  :blocked-reason "財務省は「運用条件に従えば誰でも使える」とするが、運用条件の本文（照会数の上限・遮断の条件）とライセンスを一次資料で確認できなかった。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
+ {:id :cz-ares :jurisdiction "CZ" :registry "ARES"
+  :access :api :key-required? false
+  :license "財務省（MFČR）の ARES Web サービスで公開されるデータ。サービスの利用条件（Podmínky provozu IS ARES）を守れば誰でも利用できる。CC 等のライセンス表記はない（2026-11-23 確認）"
+  :attribution "Source: ARES (Administrativní registr ekonomických subjektů, Ministerstvo financí ČR). Modified by Awai Network."
+  :url "https://ares.gov.cz/"
+  :terms-url "https://www.mfcr.cz/cs/ministerstvo/informacni-systemy/ares"
+  :spec-url "https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/v3/api-docs"
+  :spec-sha256 "822372bcc181740c1a0f43d0507c204780f575c7ddea837a65064a07a0819134"
+  :terms-verified-on "2026-11-23"
+  :evidence "GET /ekonomicke-subjekty/{ico} の応答 EconomickySubjekt の項目名を OpenAPI 3.0.0（ARES REST API v1.4.0）の components.schemas で 2026-11-23 に確認（EkonomickySubjektZaklad の ico, obchodniJmeno, sidlo, pravniForma, datumVzniku, datumZaniku, datumAktualizace, dic。sidlo は Adresa スキーマの textovaAdresa, psc, nazevObce, nazevUlice, cisloDomovni, cisloOrientacni, cisloOrientacniPismeno）"
+  :access-conditions {:max-requests-per-minute 500
+                      :block-conditions "500件/分超過、同一照会の反復、多数の同時自動照会、複数 IP での制限回避、ランダム探索、セキュリティ破壊の試み、誤った照会の反復のいずれかで財務省がアクセス制限・遮断しうる（運用条件）"
+                      :source-url "https://www.mfcr.cz/cs/ministerstvo/informacni-systemy/ares"}
+  :notes "OpenAPI 定義は日次スナップショットではなく、2026-11-23 取得の v1.4.0 固定値（132815 bytes）。icoId は IČO 未割当の ID で、ico が無いものは取り込まない。pravniForma 101/102/104/105/106/107/108（fyzická osoba、個人事業主）は取り込まない。照会は 500件/分を上限とし、取得側で守る。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
+  :status :implemented :parser itonami.legal-entity.cz-ares}
  {:id :ch-zefix :jurisdiction "CH" :registry "Zefix" :status :planned :terms-verified-on nil
   :attribution "出典として Zefix / OGD を表示する（OGD の出典表示）。Basic 認証の情報は repo に書かない"
   :blocked-reason "opendata.swiss には Zefix の一部しかなく、Zefix REST API の利用条件を一次資料で確認できなかった。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
