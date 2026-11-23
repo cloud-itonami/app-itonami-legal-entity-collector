@@ -14,15 +14,16 @@
    :entity/registered-on \"YYYY-MM-DD\"  :entity/closed-on \"YYYY-MM-DD\"
    :source {:id kw :updated-on str :attribution str :modified? true}}
 
-  NZ BulkData 由来レコードの設計制約（docs/adr/ADR-001-nz-bulkdata-usage-constraints.md）。
-  NZ 由来の :source は BDAA の制約（DM 禁止・第三者への非渡し・再配布不可・終了時削除）を
-  継承する。由来が NZ BulkData のレコードは、マーケティング・リード獲得用途に用いないこと
-  （禁止、既定）。取得物の所在は証跡ディレクトリのみに集約する（契約終了時の削除に備える）。
-  アプリ内表示は第4.6項（最新化義務）を満たす場合に限り、事業目的の表示として条件付きで可。
-  リード生成への流用は禁止。データセット自体は配布しない。
-  条文: https://companiesoffice.govt.nz/data-services/ways-to-get-our-data/bulk-data-access-agreement
+  NZ 由来レコードの設計制約（docs/adr/ADR-001-nz-bulkdata-usage-constraints.md）。
+  NZ は BDAA 申請保留（owner 判断 2026-11-23）。設計前提は NZBN API 経路のみで、
+  NZBN API の利用条件は未確認（未確認のまま。推測で埋めない）。実データ取得は
+  NZBN API の条件が揃うまでしない。
+  NZ 由来の :source は BDAA 条項（4.4(3) / 4.6 等の契約条項）を契約として継承しない
+  （BDAA を用いない間は適用対象外）。ただし設計制約として、由来が NZ のレコードは
+  マーケティング・リード獲得用途に用いないこと（禁止、既定）と、第三者に渡さないこと
+  （非渡し方針）を維持する。
 
-  出所表示・加工明示（:source {:attribution ... :modified? ...}）は BDAA 等の契約要件ではなく、
+  出所表示・加工明示（:source {:attribution ... :modified? ...}）は契約要件ではなく、
   公的データ一般原則として行う（契約が根拠ではない）。
 
   個人の情報（氏名・住所・生年月日など）は入れない。個人情報保護法の条番号対応表は
