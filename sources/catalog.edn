@@ -84,7 +84,8 @@
   :evidence "GET /ekonomicke-subjekty/{ico} の応答 EconomickySubjekt の項目名を OpenAPI 3.0.0（ARES REST API v1.4.0）の components.schemas で 2026-11-23 に確認（EkonomickySubjektZaklad の ico, obchodniJmeno, sidlo, pravniForma, datumVzniku, datumZaniku, datumAktualizace, dic。sidlo は Adresa スキーマの textovaAdresa, psc, nazevObce, nazevUlice, cisloDomovni, cisloOrientacni, cisloOrientacniPismeno）"
   :access-conditions {:max-requests-per-minute 500
                       :block-conditions "500件/分超過、同一照会の反復、多数の同時自動照会、複数 IP での制限回避、ランダム探索、セキュリティ破壊の試み、誤った照会の反復のいずれかで財務省がアクセス制限・遮断しうる（運用条件）"
-                      :source-url "https://www.mfcr.cz/cs/ministerstvo/informacni-systemy/ares"}
+                      :source-url "https://www.mfcr.cz/cs/ministerstvo/informacni-systemy/ares"
+                      :retry "429 と 5xx のみ再試行。指数バックオフ（1s→2s→4s、上限3回、総試行4）。60秒窓で500件/分を超えないよう送信間隔を調整し、同一照会の反復をしない。"}
   :notes "OpenAPI 定義は日次スナップショットではなく、2026-11-23 取得の v1.4.0 固定値（132815 bytes）。icoId は IČO 未割当の ID で、ico が無いものは取り込まない。pravniForma 101/102/104/105/106/107/108（fyzická osoba、個人事業主）は取り込まない。照会は 500件/分を上限とし、取得側で守る。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
   :status :implemented :parser itonami.legal-entity.cz-ares}
  {:id :ch-zefix :jurisdiction "CH" :registry "Zefix" :status :planned :terms-verified-on nil

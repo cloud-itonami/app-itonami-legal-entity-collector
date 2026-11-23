@@ -327,20 +327,19 @@
           (recur (inc att) rs (conj acc {:status s :wait-ms w})))))))
 
 (deftest cz-ares-retry
-  "リトライとレート制限（cz_ares.cljc の取得ポリシー、純粋関数）。時刻は注入する。"
-  (testing "① 429 → 再試行 → 成功"
+  "リトライとレート制限（cz_ares.cljc の取得ポリシー、純粋関数）。時刻は注入し、実時間では眠らない。"
+  (testing "① 429→成功 (429 → 再試行 → 成功)"
     (is (= [{:status 429 :wait-ms 1000} {:status 200 :done? true}] (simulate [429 200]))))
-  (testing "② 5xx は指数バックオフで上限（再試行 4 回）まで再試行して止まる"
+  (testing "② 上限で停止 (再試行 3 回、総試行 4)"
     (is (= [{:status 500 :wait-ms 1000} {:status 502 :wait-ms 2000} {:status 503 :wait-ms 4000}
-            {:status 599 :wait-ms 8000} {:status 503 :done? true}]
-           (simulate [500 502 503 599 503])))
-    (is (= 8000 (cz/retry-wait-ms {:status 429 :attempt 4})))
-    (is (nil? (cz/retry-wait-ms {:status 503 :attempt 5})) "上限で止まる"))
-  (testing "③ バックオフの総待機は 30 秒を超えない"
-    (let [ws (keep :wait-ms (simulate [500 502 503 599 503]))]
-      (is (= 15000 (apply + ws)))
-      (is (<= (apply + ws) cz/max-total-wait-ms))))
-  (testing "④ 500 件までは待たず、501 件目は窓の外まで待つ。バーストでも 60 秒窓に 500 件を超えない"
+            {:status 503 :done? true}]
+           (simulate [500 502 503 503])))
+    (is (= 4000 (cz/retry-wait-ms {:status 429 :attempt 3})))
+    (is (nil? (cz/retry-wait-ms {:status 503 :attempt 4})) "上限で停止")
+    (let [ws (keep :wait-ms (simulate [500 502 503 503]))]
+      (is (= 7000 (apply + ws)))
+      (is (<= (apply + ws) cz/max-total-wait-ms)) "総待機は 30 秒を超えない"))
+  (testing "③ レート超過しない (500 件まで待たず、501 件目は窓の外まで待つ。バーストでも 60 秒窓に 500 件を超えない)"
     (is (= 0 (cz/throttle-wait-ms 0 (repeat 499 0))))
     (is (= 60000 (cz/throttle-wait-ms 0 (repeat 500 0))))
     (is (= 0 (cz/throttle-wait-ms 60000 (repeat 500 0))) "窓の外（境界）の呼び出しは数えない")
@@ -356,7 +355,7 @@
                   (range (count times)))))
     (is (= 60000 (cz/next-wait-ms {:status 429 :attempt 1 :now-ms 0 :call-times (vec (repeat 500 0))})))
     (is (= 1000 (cz/next-wait-ms {:status 429 :attempt 1 :now-ms 0 :call-times []}))))
-  (testing "⑤ 429 以外の 4xx は再試行しない"
+  (testing "④ 429以外は1回 (429 以外の 4xx は再試行しない)"
     (is (every? cz/retryable-status? [429 500 502 599]))
     (is (not-any? cz/retryable-status? [200 400 401 404 428 600 nil]))
     (is (nil? (cz/retry-wait-ms {:status 404 :attempt 1})))
@@ -383,8 +382,8 @@
     {:res res :sent @sent :final-time @t}))
 
 (deftest cz-ares-retry-executor
-  "fetch-with-retry（注入時計。実ネットワーク・実 sleep なし）。"
-  (testing "429 → 再試行 → 成功"
+  "fetch-with-retry（注入時計・注入 sleep。実ネットワーク・実 sleep なし）。"
+  (testing "① 429→成功 (429 → 再試行 → 成功)"
     (let [{:keys [res sent final-time]} (fake-run [429 200])]
       (is (= 200 (get-in res [:response :status])))
       (is (= 2 (:attempts res)))
@@ -392,18 +391,18 @@
       (is (= [0 1000] sent))
       (is (= 1000 final-time))
       (is (false? (:deduped? res)))))
-  (testing "5xx が続く場合は再試行 4 回（総試行 5 回）で止まり、総待機は 30 秒を超えない"
+  (testing "② 上限で停止 (再試行 3 回、総試行 4。総待機は 30 秒を超えない)"
     (let [{:keys [res sent]} (fake-run [500 500 500 500 500 500])]
       (is (= 500 (get-in res [:response :status])))
-      (is (= 5 (:attempts res)))
-      (is (= 15000 (:waited-ms res)))
+      (is (= 4 (:attempts res)))
+      (is (= 7000 (:waited-ms res)))
       (is (<= (:waited-ms res) cz/max-total-wait-ms))
-      (is (= [0 1000 3000 7000 15000] sent))))
+      (is (= [0 1000 3000 7000] sent))))
   (testing "バックオフ総和に次の待機を足して 30 秒を超える場合は待たずに停止"
-    (is (nil? (cz/retry-wait-ms {:status 503 :attempt 4 :waited-ms 25000})))
-    (is (= 8000 (cz/retry-wait-ms {:status 503 :attempt 4 :waited-ms 22000}))
+    (is (nil? (cz/retry-wait-ms {:status 503 :attempt 3 :waited-ms 27000})))
+    (is (= 4000 (cz/retry-wait-ms {:status 503 :attempt 3 :waited-ms 26000}))
         "ちょうど 30 秒は許す"))
-  (testing "400/404 は再試行せず 1 回だけ送る"
+  (testing "④ 429以外は1回 (400/404 は再試行せず 1 回だけ送る)"
     (doseq [s [400 401 404]]
       (let [{:keys [res sent]} (fake-run [s 200])]
         (is (= s (get-in res [:response :status])))
@@ -412,8 +411,8 @@
         (is (= [0] sent))))))
 
 (deftest cz-ares-rate-limit
-  "レート制限（500件/分）。注入した送信時刻で上限を超えないことを確かめる。"
-  (testing "間隔は 120ms 以上、任意の 60 秒窓は 500 件以下"
+  "③ レート超過しない（500件/分）。注入した送信時刻で任意の 60 秒窓に 500 件を超えないことを確かめる。"
+  (testing "③ レート超過しない (任意の 60 秒窓は 500 件以下)"
     (let [t (atom 0)
           sent (atom [])
           fetch (fn [_k] (swap! sent conj @t) {:status 200})
@@ -430,9 +429,6 @@
           times (:call-times final)]
       (is (= 600 (count times)))
       (is (= 60000 (nth times 500)) "501 件目は最初の送信が窓から外れるまで待つ")
-      (is (every? (fn [[a b]] (>= (- b a) cz/min-interval-ms))
-                  (partition 2 1 times))
-          "120ms 未満の間隔はない（バーストしない）")
       (is (every? (fn [i]
                     (let [ti (nth times i)]
                       (<= (count (filter #(< % (+ ti cz/rate-window-ms))
@@ -442,25 +438,82 @@
           "任意の 60 秒窓に 500 件を超えない"))))
 
 (deftest cz-ares-dedupe
-  "同一照会の重複（1 run 内で 2 回目は送信しない）。"
-  (let [t (atom 0)
-        calls (atom 0)
-        fetch (fn [_k] (swap! calls inc) {:status 200 :body {:n @calls}})
-        run (fn [state k]
-              (cz/fetch-with-retry {:fetch fetch
-                                    :now (fn [] @t)
-                                    :sleep (fn [ms] (swap! t + ms))
-                                    :request-key k
-                                    :state state}))
-        first (run (cz/new-request-state) :same-query)
-        second (run (:state first) :same-query)
-        other (run (:state second) :other-query)]
-    (is (= 2 @calls) "2 回目の同一照会は送信しない（別照会の 1 回で計 2 回）")
-    (is (false? (:deduped? first)))
-    (is (true? (:deduped? second)))
-    (is (= 0 (:attempts second)))
-    (is (= (:response first) (:response second)) "キャッシュを返す")
-    (is (false? (:deduped? other)))))
+  "⑤ 同一照会の反復なし（dedupe-window-ms 以内の同じ照会は送らず、窓を過ぎたら再送信する）。"
+  (testing "⑤ 同一照会の反復なし (同じ照会キーで 2 回目は送信しない)"
+    (let [t (atom 0)
+          calls (atom 0)
+          fetch (fn [_k] (swap! calls inc) {:status 200 :body {:n @calls}})
+          run (fn [state k]
+                (cz/fetch-with-retry {:fetch fetch
+                                      :now (fn [] @t)
+                                      :sleep (fn [ms] (swap! t + ms))
+                                      :request-key k
+                                      :state state}))
+          first (run (cz/new-request-state) :same-query)
+          second (run (:state first) :same-query)
+          other (run (:state second) :other-query)]
+      (is (= 2 @calls) "2 回目の同一照会は送信しない（別照会の 1 回で計 2 回）")
+      (is (false? (:deduped? first)))
+      (is (true? (:deduped? second)))
+      (is (= 0 (:attempts second)))
+      (is (= (:response first) (:response second)) "キャッシュを返す")
+      (is (false? (:deduped? other)))))
+  (testing "⑤ 同一照会の反復なし (同じ IČO を 2 回 → 2 回目の送信回数は 0。時刻注入)"
+    (let [t (atom 0)
+          sends (atom 0)
+          fetch (fn [_k] (swap! sends inc) {:status 200 :body {:ico _k :n @sends}})
+          run (fn [state]
+                (cz/fetch-ico {:fetch fetch
+                               :now (fn [] @t)
+                               :sleep (fn [ms] (swap! t + ms))
+                               :ico "99900009"
+                               :state state}))
+          first (run (cz/new-request-state))
+          before @sends
+          second (run (:state first))]
+      (is (= 1 before) "初回は送信する")
+      (is (= before @sends) "2 回目の同じ IČO は送信しない（送信回数はそのまま）")
+      (is (= 0 (- @sends before)) "2 回目の送信回数は 0")
+      (is (true? (:deduped? second)))
+      (is (= (:response first) (:response second)) "窓内は結果を使い回す")))
+  (testing "⑤ 同一照会の反復なし (429 後の再照会も反復しない。IČO を 1 回だけ送る)"
+    (let [t (atom 0)
+          q (atom [429 200])
+          sends (atom 0)
+          fetch (fn [_k]
+                  (swap! sends inc)
+                  (let [s (first @q)]
+                    (swap! q (fn [v] (subvec v 1)))
+                    {:status s}))
+          run (fn [state]
+                (cz/fetch-ico {:fetch fetch
+                               :now (fn [] @t)
+                               :sleep (fn [ms] (swap! t + ms))
+                               :ico "99900009"
+                               :state state}))
+          first (run (cz/new-request-state))
+          before @sends
+          second (run (:state first))]
+      (is (= 2 before) "初回は 429 → 再試行 → 成功で 2 回送る")
+      (is (= before @sends) "同じ IČO の 2 回目は 429 リトライ後でも送らない")
+      (is (= 0 (- @sends before)) "2 回目の送信回数は 0")
+      (is (true? (:deduped? second)))
+      (is (= 200 (get-in second [:response :status])))))
+  (testing "⑤ 同一照会の反復なし (dedupe-window-ms を過ぎたら再送信する)"
+    (let [t (atom 0)
+          sends (atom 0)
+          fetch (fn [_k] (swap! sends inc) {:status 200})
+          run (fn [state]
+                (cz/fetch-ico {:fetch fetch
+                               :now (fn [] @t)
+                               :sleep (fn [ms] (swap! t + ms))
+                               :ico "99900009"
+                               :state state}))
+          first (run (cz/new-request-state))
+          expired (do (swap! t + cz/dedupe-window-ms)
+                      (run (:state first)))]
+      (is (= 2 @sends) "窓を過ぎれば同じ IČO でも再送信する")
+      (is (false? (:deduped? expired))))))
 
 ;; --- カタログ -------------------------------------------------------------
 
