@@ -5,7 +5,8 @@
    :entity/jurisdiction \"JP\"                     ; ISO 3166-1 alpha-2
    :entity/name         \"...\"
    :entity/identifiers  [{:scheme :jp-corporate-number :value \"...\"} ...]
-   :entity/status       :active | :inactive | :closed | :unknown
+   :entity/status       :active | :inactive | :closed | :bankrupt | :unknown
+   :entity/status-detail \"N\" ;; 法域の原コード。破産中と清算中は :bankrupt / :inactive と区別し、原コードも残す（例：EE N）
    ;; 以下は任意
    :entity/jurisdiction-detail \"US-DE\"
    :entity/name-en  :entity/name-kana
@@ -34,7 +35,7 @@
   docs/adr/20261123-nz-bulkdata-usage-constraints.md を参照。"
   (:require [itonami.legal-entity.ids :as ids]))
 
-(def statuses #{:active :inactive :closed :unknown})
+(def statuses #{:active :inactive :closed :unknown :bankrupt})
 
 (def identifier-schemes
   "scheme → 値の検証関数。未知の scheme は拒否する。"
@@ -49,6 +50,7 @@
    :au-acn ids/au-acn?
    :ca-corporation-number ids/ca-corporation-number?
    :ca-business-number ids/ca-business-number?
+   :ee-registry-code ids/ee-registry-code?
    :registration-number #(and (string? %) (<= 1 (count %) 64))})
 
 (defn identifier-problems [{:keys [scheme value]}]
