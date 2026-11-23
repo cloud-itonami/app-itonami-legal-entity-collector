@@ -105,6 +105,11 @@
   [s]
   (digits? s 9))
 
+(defn ee-registry-code?
+  "エストニアの äriregistri kood（8 桁の数字）。検査数字は確かめない。"
+  [s]
+  (digits? s 8))
+
 (defn country-code?
   "ISO 3166-1 alpha-2 の形（大文字 2 文字）。実在の国かまでは見ない。"
   [s]
