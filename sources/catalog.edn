@@ -116,8 +116,14 @@
   :evidence "CSV の見出し 18 列を 2026-11-18 に active-cbca と inactive-or-dissolved-non-cbca の英語版の先頭行で確認"
   :notes "連邦法人だけ（州法人は含まない）。英語版の 4 ファイルを使う。Status の値は Active のほかを確認できていない。取締役の人数の列は取り込まない。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
   :status :implemented :parser itonami.legal-entity.ca-ised}
- {:id :br-cnpj :jurisdiction "BR" :registry "Receita Federal CNPJ" :status :planned :terms-verified-on nil
-  :blocked-reason "ライセンスの記載が二次情報で食い違う（dados.gov.br は CC BY、別の情報では Receita の公開場所が CC BY-ND 3.0 で改変不可）。dados.gov.br と Receita Federal の一次資料を取得できなかった。Empresas には個人事業主（MEI など）の氏名が入るため、除外の規則も要る。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
+ {:id :br-cnpj :jurisdiction "BR" :registry "Receita Federal CNPJ" :access :bulk-csv :key-required? false :status :planned :terms-verified-on nil
+  :url "https://arquivos.receitafederal.gov.br/index.php/s/YggdBLfdninEJX9"
+  :terms-url "https://www.gov.br/receitafederal/dados"
+  :attribution "出典：Receita Federal（RFB）CNPJ Dados Abertos（表示義務はライセンス確定後に再確認。方針として出典を示す）"
+  :access-conditions {:bulk-monthly "月次 ZIP（2026-11 は 36 ファイル ≒ 7.87 GB)。全体取得は非推奨。照会ベースか分割ファイル 1 本に留める"
+                      :rate-limit "一次資料に数値なし（未確認）"
+                      :source-url "https://www.gov.br/receitafederal/dados"}
+  :blocked-reason "ZIP ファイル自体のライセンスが一次資料で未確認（no explicit license found）。Portal 表記 CC BY（版なし、二次）と RFB サイトフッタ CC BY-ND 3.0（サイト内容のみ）の射程がファイルに及ぶか未確認で、ND 下のスキーマ変換可否も Legal / owner 確認待ち。Empresas に Empresário Individual / MEI の個人名が含まれるかは ZIP 本体未取得のため未確認。区切り文字・補助表の中身・単一照会のキー不要・レート制限も未確認。詳細は docs/sources/br-cnpj.md（2026-11-23 確認）。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :au-abr :jurisdiction "AU" :registry "Australian Business Register"
   :access :bulk-xml :key-required? false :license "CC BY 3.0 AU"
   :attribution "出典：Australian Business Register（CC BY 3.0 AU の出所表示）"
