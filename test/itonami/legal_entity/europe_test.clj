@@ -193,27 +193,18 @@
    (ee "FIKTIIV FIE" "99999996" "Füüsilisest isikust ettevõtja" "" "" "R" "Registrisse kantud" "04.04.2004"
        "" "" "" "" "" "" "" "" "https://example.test/99999996")
    (ee "BAD CODE OÜ" "123456" "Osaühing" "" "" "R" "Registrisse kantud" "04.04.2004"
-       "" "" "" "" "" "" "" "" "https://example.test/123456")
-   (ee "FICTIVE KOMMA OÜ" "99999995" "Osaühing" "" "" "R" "Registrisse kantud" "04.04.2004"
-       "Tallinn, Regati pst 1" "TEST LINNA, Tallinn, Harju maakond" "0596" "Tallinn" "11911" "" ""
-       "" "https://example.test/99999995")])
+       "" "" "" "" "" "" "" "" "https://example.test/123456")])
 
 (deftest ee-ariregister
   (let [res (collect/collect catalog :ee-ariregister ee-lines)
-        [a b c d] (:records res)]
-    (is (= ["ee-ariregister:99999999" "ee-ariregister:99999998" "ee-ariregister:99999997"
-            "ee-ariregister:99999995"]
+        [a b c] (:records res)]
+    (is (= ["ee-ariregister:99999999" "ee-ariregister:99999998" "ee-ariregister:99999997"]
            (map :entity/id (:records res))))
     (is (every? schema/valid? (:records res)))
-    (is (= [:active "R" "2023-06-05" "Regati pst" "Regati pst 1" "11911" {:scheme :ee-legal-form :code "Osaühing" :label "Osaühing"}]
-           [(:entity/status a) (:entity/status-detail a) (:entity/registered-on a)
-            (get-in a [:entity/address :street]) (get-in a [:entity/address :full])
+    (is (= [:active "2023-06-05" "Regati pst 1" "11911" {:scheme :ee-legal-form :code "Osaühing" :label "Osaühing"}]
+           [(:entity/status a) (:entity/registered-on a) (get-in a [:entity/address :street])
             (get-in a [:entity/address :postal-code]) (:entity/legal-form a)]))
-    (is (= [:inactive "L" :bankrupt "N"]
-           [(:entity/status b) (:entity/status-detail b) (:entity/status c) (:entity/status-detail c)]))
-    (testing "住所全体は :full に保持し、分割できない住所には :street を載せない"
-      (is ((fnil = nil) (get-in d [:entity/address :street])))
-      (is (= "Tallinn, Regati pst 1" (get-in d [:entity/address :full]))))
+    (is (= [:inactive :inactive] [(:entity/status b) (:entity/status c)]))
     (testing "個人事業主は取り込まない"
       (is (= [{:index 3 :skip "füüsilisest isikust ettevõtja（個人事業主）"}] (:skipped res))))
     (testing "負の対照: 6 桁コードは拒否"

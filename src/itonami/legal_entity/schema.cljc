@@ -5,8 +5,7 @@
    :entity/jurisdiction \"JP\"                     ; ISO 3166-1 alpha-2
    :entity/name         \"...\"
    :entity/identifiers  [{:scheme :jp-corporate-number :value \"...\"} ...]
-   :entity/status       :active | :inactive | :closed | :bankrupt | :unknown
-   :entity/status-detail \"N\" ;; 法域の原コード。破産中と清算中は :bankrupt / :inactive と区別し、原コードも残す（例：EE N）
+   :entity/status       :active | :inactive | :closed | :unknown
    ;; 以下は任意
    :entity/jurisdiction-detail \"US-DE\"
    :entity/name-en  :entity/name-kana
@@ -19,7 +18,7 @@
   個人の情報（氏名・住所・生年月日など）は入れない。"
   (:require [itonami.legal-entity.ids :as ids]))
 
-(def statuses #{:active :inactive :closed :unknown :bankrupt})
+(def statuses #{:active :inactive :closed :unknown})
 
 (def identifier-schemes
   "scheme → 値の検証関数。未知の scheme は拒否する。"
