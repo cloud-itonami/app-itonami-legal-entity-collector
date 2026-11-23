@@ -119,11 +119,18 @@
  {:id :br-cnpj :jurisdiction "BR" :registry "Receita Federal CNPJ" :access :bulk-csv :key-required? false :status :planned :terms-verified-on nil
   :url "https://arquivos.receitafederal.gov.br/index.php/s/YggdBLfdninEJX9"
   :terms-url "https://www.gov.br/receitafederal/dados"
+  :distribution :internal-only
+  :retrieved-file "Empresas1.zip"
+  :retrieved-on "2026-11-23"
+  :retrieved-sha256 "5aaa6308485098878c8f0da9a66a63af09b3d50aaf5fccb4eb70479fb12951b9"
+  :retrieved-bytes 77906042
+  :evidence "2026-11-23 に Empresas1.zip（2026-11、77906042 bytes、ZIP 内 K3241.K03200Y1.D61114.EMPRECSV）の 1 ファイルだけを取得し、列・区切り・エンコーディングを実ファイルで確認（見出し行なし・7 列・全列ダブルクォート・区切り ;・行区切り LF・latin1（UTF-8 不正）・CNPJ BÁSICO 8 桁・natureza ダッシュなし 4 桁。全 4494860 行が 7 列）。2135（Empresário Individual）は 1859420 行で skip する。個人データを含む本体ファイルは構造確認の後に削除し、ハッシュと列事実だけを残した。parser（itonami.legal-entity.br-cnpj）の経路はこの 1 ファイルで通した（テストは架空データのみ）。全件取得・配布は行わない。"
+  :parser itonami.legal-entity.br-cnpj
   :attribution "出典：Receita Federal（RFB）CNPJ Dados Abertos（表示義務はライセンス確定後に再確認。方針として出典を示す）"
   :access-conditions {:bulk-monthly "月次 ZIP（2026-11 は 36 ファイル ≒ 7.87 GB)。全体取得は非推奨。照会ベースか分割ファイル 1 本に留める"
                       :rate-limit "一次資料に数値なし（未確認）"
                       :source-url "https://www.gov.br/receitafederal/dados"}
-  :blocked-reason "ZIP ファイル自体のライセンスが一次資料で未確認（no explicit license found）。Portal 表記 CC BY（版なし、二次）と RFB サイトフッタ CC BY-ND 3.0（サイト内容のみ）の射程がファイルに及ぶか未確認で、ND 下のスキーマ変換可否も Legal / owner 確認待ち。Empresas に Empresário Individual / MEI の個人名が含まれるかは ZIP 本体未取得のため未確認。区切り文字・補助表の中身・単一照会のキー不要・レート制限も未確認。詳細は docs/sources/br-cnpj.md（2026-11-23 確認）。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
+  :blocked-reason "ZIP ファイル自体のライセンスが一次資料で未確認（no explicit license found）。Portal 表記 CC BY（版なし、二次）と RFB サイトフッタ CC BY-ND 3.0（サイト内容のみ）の射程がファイルに及ぶか未確認で、ND 下のスキーマ変換可否も Legal / owner 確認待ち。Empresas1.zip（2026-11、1 ファイルのみ）を取得し、natureza 2135（Empresário Individual、razão social が個人名）の行が 1859420 行（全 4494860 行）実在することを確認。parser はこれらの行を入口で除外する。Sócios の個人列と Estabelecimentos の電話・メールは本経路では触らない（未取得）。区切り文字・補助表の中身・単一照会のキー不要・レート制限も未確認。詳細は docs/sources/br-cnpj.md（2026-11-23 確認）。内部利用のみ・配布不可（owner 承認 2026-11-23：弁護士確認とオーナー判断の後）。Empresas 1 ファイルの経路は実装・テスト済み（2026-11-23、:status は :planned のまま）。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :au-abr :jurisdiction "AU" :registry "Australian Business Register"
   :access :bulk-xml :key-required? false :license "CC BY 3.0 AU"
   :attribution "出典：Australian Business Register（CC BY 3.0 AU の出所表示）"

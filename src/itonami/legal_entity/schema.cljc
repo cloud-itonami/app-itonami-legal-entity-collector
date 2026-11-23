@@ -53,6 +53,8 @@
    :ca-business-number ids/ca-business-number?
    :ee-registry-code ids/ee-registry-code?
    :cz-ico ids/cz-ico?
+   :br-cnpj-base ids/cnpj-base?
+   :br-cnpj ids/cnpj14?
    :registration-number #(and (string? %) (<= 1 (count %) 64))})
 
 (defn identifier-problems [{:keys [scheme value]}]
