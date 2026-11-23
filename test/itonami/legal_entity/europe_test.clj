@@ -446,6 +446,25 @@
     (is (= [] @sleeps) "レート待機なし")
     (is (= 2 (count (:call-times @state))) "キャッシュヒットは送信時刻に数えない")))
 
+(deftest cz-ares-dedupe-after-retry
+  "再試行を伴った同一照会の反復もしない（初回 429→再試行→成功の後、同じ IČO は送らない）。"
+  (let [state (cz/new-request-state)
+        clock (atom 0) sleeps (atom []) calls (atom 0)
+        req (fn [] (swap! calls inc) {:status (if (= 1 @calls) 429 200) :body {:ok true}})
+        sleep (fn [ms] (swap! sleeps conj ms) (swap! clock + ms))
+        now (fn [] @clock)
+        r1 (cz/request-with-retry req sleep now {:state state :request-key "ico:99900009"})
+        calls-after-first @calls
+        r2 (cz/request-with-retry req sleep now {:state state :request-key "ico:99900009"})
+        calls-after-second @calls
+        r3 (cz/request-with-retry req sleep now {:state state :request-key "ico:99900017"})]
+    (is (= {:ok true} r1) "初回は 429 の再試行の後に成功する")
+    (is (= 2 calls-after-first) "初回は初発と再試行で 2 回送る")
+    (is (= [1000] @sleeps) "再試行の待機は 1s")
+    (is (= r1 r2) "2回目はキャッシュを返す")
+    (is (= calls-after-first calls-after-second) "同じ IČO を 2 回続けて照会しても 2 回目は送らない")
+    (is (= 3 @calls) "別の IČO は送る")))
+
 ;; --- カタログ -------------------------------------------------------------
 
 (deftest europe-catalog
