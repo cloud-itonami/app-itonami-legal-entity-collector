@@ -5,6 +5,8 @@
             [clojure.test :refer [deftest is testing]]
             [itonami.legal-entity.collect :as collect]
             [itonami.legal-entity.csv :as csv]
+            [itonami.legal-entity.cz-ares :as cz]
+            [itonami.legal-entity.ee-ariregister :as ee]
             [itonami.legal-entity.fi-prh :as fi]
             [itonami.legal-entity.fr-sirene :as fr]
             [itonami.legal-entity.gb-companies-house :as gb]
@@ -219,6 +221,50 @@
     (testing "負の対照: 6 桁コードは拒否"
       (is (= [4] (map :index (:rejected res)))))))
 
+(deftest ee-empty-response
+  "空のレスポンス（空文字列・空行のみ）では記録ができない。"
+  (testing "空文字列は行を生まない（行数不足）"
+    (is (= [] (vec (csv/rows [""] \;)))))
+  (testing "空の map を normalize すると problems が拒否される"
+    (let [r (ee/normalize {})]
+      (is (string? (:reject r)) "空行は problems として検出される")
+      (is (str/includes? (:reject r) "entity"))))
+  (testing "見出しだけでは記録も拒否も生まない"
+    (let [res (collect/collect catalog :ee-ariregister [ee-header])]
+      (is (= [] (:records res)))
+      (is (= [] (:rejected res)))))
+  (testing "空行は collect で 1 件拒否（problems）になる"
+    (let [res (collect/collect catalog :ee-ariregister [ee-header ""])]
+      (is (= [] (:records res)))
+      (is (= 1 (count (:rejected res))))
+      (is (str/includes? (:reject (first (:rejected res))) "entity")))))
+
+(deftest ee-column-mismatch
+  "17 列でない行は列数不足として拒否される。"
+  (is (= [{:reject "列数が 3（見出しは 17）"}]
+         (vec (csv/rows [ee-header "a;b;c"] \;))))
+  (let [res (collect/collect catalog :ee-ariregister [ee-header "a;b;c"])]
+    (is (= [] (:records res)) "列数不一致の行は記録にならない")
+    (is (= 1 (count (:rejected res))))) )
+
+(deftest ee-bom-csv
+  "BOM 付き CSV は最初の列名に BOM が混入せず正常にパースされる。"
+  (let [rows (csv/rows [(str (char 0xFEFF) ee-header) (first (rest ee-lines))] \;)]
+    (is (= 1 (count rows)))
+    (is (= "FICTIVE HOLDING OÜ" (get (first rows) "nimi")) "BOM が列名に残らない"))
+  (let [res (collect/collect catalog :ee-ariregister [(str (char 0xFEFF) ee-header) (first (rest ee-lines))])]
+    (is (= ["ee-ariregister:99999999"] (map :entity/id (:records res))))))
+
+(deftest ee-semicolon-rows
+  "; 区切りの正例を csv/rows のレベルで確かめる（見出し 17 列に拆解される）。"
+  (let [rows (csv/rows [ee-header (first (rest ee-lines))] \;)]
+    (is (= 1 (count rows)))
+    (let [m (first rows)]
+      (is (= 17 (count (keys m))))
+      (is (= "FICTIVE HOLDING OÜ" (get m "nimi")))
+      (is (= "99999999" (get m "ariregistri_kood")))
+      (is (= "Osaühing" (get m "ettevotja_oiguslik_vorm"))))))
+
 ;; --- CZ -------------------------------------------------------------------
 
 ;; 項目名は 2026-11-23 に取得した OpenAPI 定義（v1.4.0）の EconomickySubjekt / Adresa どおり。
@@ -259,6 +305,166 @@
     (testing "負の対照: チェックデジット不一致、IČO 未割当の icoId"
       (is (= [3 4] (map :index (:rejected res)))))))
 
+(defn- simulate
+  "失敗応答の並びを流し、retry-wait-ms の決定 [{:status :wait-ms|:done?}] を返す。"
+  [statuses]
+  (loop [att 1 [s & rs] statuses acc []]
+    (if (nil? s) acc
+      (let [w (cz/retry-wait-ms {:status s :attempt att})]
+        (if (nil? w)
+          (conj acc {:status s :done? true})
+          (recur (inc att) rs (conj acc {:status s :wait-ms w})))))))
+
+(deftest cz-ares-retry
+  "リトライとレート制限（cz_ares.cljc の取得ポリシー、純粋関数）。時刻は注入する。"
+  (testing "① 429 → 再試行 → 成功"
+    (is (= [{:status 429 :wait-ms 1000} {:status 200 :done? true}] (simulate [429 200]))))
+  (testing "② 5xx は指数バックオフで上限（再試行 4 回）まで再試行して止まる"
+    (is (= [{:status 500 :wait-ms 1000} {:status 502 :wait-ms 2000} {:status 503 :wait-ms 4000}
+            {:status 599 :wait-ms 8000} {:status 503 :done? true}]
+           (simulate [500 502 503 599 503])))
+    (is (= 8000 (cz/retry-wait-ms {:status 429 :attempt 4})))
+    (is (nil? (cz/retry-wait-ms {:status 503 :attempt 5})) "上限で止まる"))
+  (testing "③ バックオフの総待機は 30 秒を超えない"
+    (let [ws (keep :wait-ms (simulate [500 502 503 599 503]))]
+      (is (= 15000 (apply + ws)))
+      (is (<= (apply + ws) cz/max-total-wait-ms))))
+  (testing "④ 500 件までは待たず、501 件目は窓の外まで待つ。バーストでも 60 秒窓に 500 件を超えない"
+    (is (= 0 (cz/throttle-wait-ms 0 (repeat 499 0))))
+    (is (= 60000 (cz/throttle-wait-ms 0 (repeat 500 0))))
+    (is (= 0 (cz/throttle-wait-ms 60000 (repeat 500 0))) "窓の外（境界）の呼び出しは数えない")
+    (let [times (loop [now 0 times [] i 0]
+                  (if (>= i 600) times
+                    (let [now (+ now (cz/throttle-wait-ms now times))]
+                      (recur now (conj times now) (inc i)))))]
+      (is (= 60000 (last times)))
+      (is (every? (fn [i]
+                    (let [t (nth times i)]
+                      (<= (count (filter #(< % (+ t cz/rate-window-ms)) (drop i times)))
+                          cz/max-requests-per-minute)))
+                  (range (count times)))))
+    (is (= 60000 (cz/next-wait-ms {:status 429 :attempt 1 :now-ms 0 :call-times (vec (repeat 500 0))})))
+    (is (= 1000 (cz/next-wait-ms {:status 429 :attempt 1 :now-ms 0 :call-times []}))))
+  (testing "⑤ 429 以外の 4xx は再試行しない"
+    (is (every? cz/retryable-status? [429 500 502 599]))
+    (is (not-any? cz/retryable-status? [200 400 401 404 428 600 nil]))
+    (is (nil? (cz/retry-wait-ms {:status 404 :attempt 1})))
+    (is (nil? (cz/next-wait-ms {:status 404 :attempt 1 :now-ms 0 :call-times []})))))
+
+;; リトライ実行関数（request-with-retry）。時刻・sleep は注入し、実時間では眠らない。
+;; fake clock は sleep の分だけ進む。ステータスは架空のもののみ。
+
+(defn- run-request
+  "statuses を順に返す fake request-fn（無くなったら最後を繰り返す）で cz/request-with-retry を実行し、
+  {:result r :sleeps [...] :calls n} を返す。実時間では眠らない。"
+  [statuses body]
+  (let [clock (atom 0) sleeps (atom []) calls (atom 0)
+        rest (atom (seq statuses))]
+    (let [result (cz/request-with-retry
+                  (fn [] (swap! calls inc)
+                        (let [s (first @rest)]
+                          (when (next @rest) (swap! rest next))
+                          {:status s :body body}))
+                  (fn [ms] (swap! sleeps conj ms) (swap! clock + ms))
+                  (fn [] @clock))]
+      {:result result :sleeps @sleeps :calls @calls})))
+
+(deftest cz-ares-retry-executor
+  "request-with-retry（429 と 5xx のみ、1s-2s-4s-8s、上限 4 回、総待機 30 秒、120ms 間隔）。時刻は fake。 "
+  (testing "① 429 → 再試行 → 成功"
+    (let [{:keys [result sleeps calls]} (run-request [429 200] {:ok true})]
+      (is (= {:ok true} result) "成功時は body をそのまま返す")
+      (is (= [1000] sleeps))
+      (is (= 2 calls)))
+    (let [{:keys [result sleeps calls]} (run-request [503 200] {:ok true})]
+      (is (= {:ok true} result) "5xx も再試行する")
+      (is (= [1000] sleeps))
+      (is (= 2 calls))))
+  (testing "② 上限で停止（初発 + 再試行 4 回 = 5 試行）"
+    (let [{:keys [result sleeps calls]} (run-request [429] nil)]
+      (is (= [1000 2000 4000 8000] sleeps))
+      (is (= 5 calls))
+      (is (= {:status 429 :attempts 5 :waited-ms 15000} result))))
+  (testing "③ 総待機が 30 秒を超えない"
+    (let [{:keys [result sleeps]} (run-request [500 502 503 599 503] nil)]
+      (is (<= (reduce + 0 sleeps) cz/max-total-wait-ms))
+      (is (<= (:waited-ms result) cz/max-total-wait-ms))))
+  (testing "④ レート遵守：同一 request-fn への試行間隔が 120ms 未満にならない"
+    (is (= 120 cz/min-interval-ms))
+    (is (= 70 (cz/interval-wait-ms 0 50)) "不足分を sleep で補う計算")
+    (is (= 0 (cz/interval-wait-ms 0 120)) "境界は待たない")
+    (is (= 0 (cz/interval-wait-ms 0 200)) "間隔が十分なら待たない")
+    (is (= 0 (cz/interval-wait-ms nil 0)) "初回は待たない")
+    (let [clock (atom 0) sleeps (atom []) times (atom []) n (atom 0)
+          req (fn [] (swap! times conj @clock)
+                    {:status (if (= 1 (swap! n inc)) 429 200) :body {:ok true}})
+          body (cz/request-with-retry req
+                                      (fn [ms] (swap! sleeps conj ms) (swap! clock + ms))
+                                      (fn [] @clock))]
+      (is (= {:ok true} body))
+      (is (= [1000] @sleeps) "sleep で間隔が確保された")
+      (is (every? #(<= 120 %) (map - (rest @times) @times)) "試行時刻の差が 120ms 以上")))
+  (testing "⑤ 429 以外の 4xx は再試行しない"
+    (doseq [s [400 403 404]]
+      (let [{:keys [result sleeps calls]} (run-request [s] nil)]
+        (is (= 1 calls) (str s))
+        (is (= [] sleeps) (str s))
+        (is (= {:status s :attempts 1 :waited-ms 0} result) (str s))))))
+
+(deftest cz-ares-rate-window
+  "trailing 60 秒で 500 件を超えない（fake clock は sleep の分だけ進み、送信回数を数える）。"
+  (let [state (cz/new-request-state)
+        clock (atom 0) sleeps (atom []) times (atom [])
+        req (fn [] (swap! times conj @clock) {:status 200 :body {:ok true}})
+        sleep (fn [ms] (swap! sleeps conj ms) (swap! clock + ms))
+        now (fn [] @clock)]
+    (dotimes [_ 501]
+      (cz/request-with-retry req sleep now {:state state}))
+    (is (= 501 (count @times)) "501 件すべて送る（止めずに待つ）")
+    (is (= [60000] @sleeps) "500 件で window が満杯になり、古い試行が窓から外れるまで待つ")
+    (is (= 60000 (last @times)) "501 件目は窓の外で送られる")
+    (is (every? (fn [i]
+                  (let [t (nth @times i)]
+                    (<= (count (filter #(< % (+ t cz/rate-window-ms)) (drop i @times)))
+                        cz/max-requests-per-minute)))
+                (range (count @times)))
+        "いずれの 60 秒窓でも 500 件を超えない")))
+
+(deftest cz-ares-dedupe
+  "同一照会の反復をしない（2回目は request-fn を呼ばずキャッシュを返す）。"
+  (let [state (cz/new-request-state)
+        clock (atom 0) sleeps (atom []) calls (atom 0)
+        req (fn [] (swap! calls inc) {:status 200 :body {:ok true}})
+        sleep (fn [ms] (swap! sleeps conj ms) (swap! clock + ms))
+        now (fn [] @clock)
+        r1 (cz/request-with-retry req sleep now {:state state :request-key "ico:99900009"})
+        r2 (cz/request-with-retry req sleep now {:state state :request-key "ico:99900009"})
+        r3 (cz/request-with-retry req sleep now {:state state :request-key "ico:99900017"})]
+    (is (= {:ok true} r1))
+    (is (= r1 r2) "2回目はキャッシュを返す")
+    (is (= 2 @calls) "2回目は送らず、別の対象は送る")
+    (is (= [] @sleeps) "レート待機なし")
+    (is (= 2 (count (:call-times @state))) "キャッシュヒットは送信時刻に数えない")))
+
+(deftest cz-ares-dedupe-after-retry
+  "再試行を伴った同一照会の反復もしない（初回 429→再試行→成功の後、同じ IČO は送らない）。"
+  (let [state (cz/new-request-state)
+        clock (atom 0) sleeps (atom []) calls (atom 0)
+        req (fn [] (swap! calls inc) {:status (if (= 1 @calls) 429 200) :body {:ok true}})
+        sleep (fn [ms] (swap! sleeps conj ms) (swap! clock + ms))
+        now (fn [] @clock)
+        r1 (cz/request-with-retry req sleep now {:state state :request-key "ico:99900009"})
+        calls-after-first @calls
+        r2 (cz/request-with-retry req sleep now {:state state :request-key "ico:99900009"})
+        calls-after-second @calls
+        r3 (cz/request-with-retry req sleep now {:state state :request-key "ico:99900017"})]
+    (is (= {:ok true} r1) "初回は 429 の再試行の後に成功する")
+    (is (= 2 calls-after-first) "初回は初発と再試行で 2 回送る")
+    (is (= [1000] @sleeps) "再試行の待機は 1s")
+    (is (= r1 r2) "2回目はキャッシュを返す")
+    (is (= calls-after-first calls-after-second) "同じ IČO を 2 回続けて照会しても 2 回目は送らない")
+    (is (= 3 @calls) "別の IČO は送る")))
+
 ;; --- カタログ -------------------------------------------------------------
 
 (deftest europe-catalog
@@ -272,6 +478,23 @@
         (is (not= :implemented (get-in by-id [id :status])) (name id))
         (is (string? (get-in by-id [id :blocked-reason])) (name id))
         (is (:error (collect/collect catalog id [])) (name id))))))
+
+(deftest cz-ares-retry-terms
+  "catalog の :retry 条項と実装の対応を固定する（条項だけ書いて実装が無い状態を許さない）。"
+  (let [retry (get-in (into {} (map (juxt :id identity) catalog)) [:cz-ares :access-conditions :retry])]
+    (is (string? retry))
+    (testing "数と順序が実装の定数と一致する"
+      (is (str/includes? retry "上限4回"))
+      (is (str/includes? retry "1s→2s→4s→8s"))
+      (is (= 4 cz/max-retries))
+      (is (= [1000 2000 4000 8000] cz/backoff-schedule-ms))
+      (is (= 30000 cz/max-total-wait-ms))
+      (is (= 500 cz/max-requests-per-minute)))
+    (testing "取得側の責務（この parser は通信しない）と、守る関数名・テスト名が書かれている"
+      (is (str/includes? retry "純粋"))
+      (is (str/includes? retry "request-with-retry"))
+      (is (str/includes? retry ":request-key"))
+      (is (str/includes? retry "cz-ares-retry")))))
 
 (deftest csv-rows
   (is (= [{"a" "1" "b" "2"} {:reject "列数が 1（見出しは 2）"}] (csv/rows ["a, b" "1,2" "3"])))
