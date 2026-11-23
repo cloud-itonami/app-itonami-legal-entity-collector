@@ -6,7 +6,7 @@
   :access :api :key-required? false :license "CC0 1.0"
   :url "https://api.gleif.org/api/v1/lei-records"
   :terms-verified-on "2026-11-18"
-  :evidence "API 応答の形を 2026-11-18 に 1 件取得して確認（lei / entity / registration）"
+  :evidence "API 応答の形を 2026-11-18 に 1 件取得して確認（lei / entity / registration）。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
   :status :implemented :parser itonami.legal-entity.gleif}
  {:id :jp-nta :jurisdiction "JP" :registry "国税庁 法人番号公表サイト"
   :access :bulk-csv :key-required? false
@@ -16,7 +16,7 @@
   :spec-url "https://www.houjin-bangou.nta.go.jp/pc/download/images/k-resource-dl.pdf"
   :spec-sha256 "9bc611fcf9d533502a34f287b6d8673564974b89fad23cba824cd681095ac8ba"
   :terms-verified-on "2026-11-18"
-  :notes "Web-API はアプリケーション ID が要る。全件・差分ダウンロードは不要。検索対象除外（項番 36）は取り込まない"
+  :notes "Web-API はアプリケーション ID が要る。全件・差分ダウンロードは不要。検索対象除外（項番 36）は取り込まない。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
   :status :implemented :parser itonami.legal-entity.jp-nta}
  {:id :gb-companies-house :jurisdiction "GB" :registry "UK Companies House"
   :access :bulk-csv :key-required? false
@@ -26,7 +26,7 @@
   :spec-url "https://resources.companieshouse.gov.uk/toolsToHelp/pdf/freeDataProductDataset.pdf"
   :spec-sha256 "be0e2ac20bfd4793b1eecae87929d8016c00bdf8639fd708514ba3edbbd041bb"
   :terms-verified-on "2026-11-18"
-  :notes "Free Company Data Product（存続中の会社、月次 CSV）。役員の情報は含まない。仕様書は見出しの綴りを示さないため、RegAddress. 付きと無しの両方を受け付ける"
+  :notes "Free Company Data Product（存続中の会社、月次 CSV）。役員の情報は含まない。仕様書は見出しの綴りを示さないため、RegAddress. 付きと無しの両方を受け付ける。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
   :status :implemented :parser itonami.legal-entity.gb-companies-house}
  {:id :fr-sirene :jurisdiction "FR" :registry "INSEE SIRENE"
   :access :bulk-csv :key-required? false :license "Licence Ouverte / Open Licence 2.0"
@@ -34,37 +34,37 @@
   :spec-url "https://static.data.gouv.fr/resources/base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret/20260113-143438/stockunitelegale-311-dessin-de-fichier.csv"
   :spec-sha256 "d96b3d9a6fbb4d4275571ba54aceb5dfef7cfc85bb0e07e023af4f610a023e89"
   :terms-verified-on "2026-11-18"
-  :notes "StockUniteLegale のみ。personne physique（categorieJuridique 1xxx）と部分公開（statutDiffusion P）は取り込まない。CSV 版は 2027 年後半に終わり Parquet のみになる予定（data.gouv.fr の告知）"
+  :notes "StockUniteLegale のみ。personne physique（categorieJuridique 1xxx）と部分公開（statutDiffusion P）は取り込まない。CSV 版は 2027 年後半に終わり Parquet のみになる予定（data.gouv.fr の告知）。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
   :status :implemented :parser itonami.legal-entity.fr-sirene}
  {:id :no-brreg :jurisdiction "NO" :registry "Brønnøysundregistrene Enhetsregisteret"
   :access :bulk-json :key-required? false :license "Norsk lisens for offentlige data (NLOD) 2.0"
   :url "https://data.brreg.no/enhetsregisteret/api/enheter/lastned"
   :spec-url "https://data.brreg.no/enhetsregisteret/api/dokumentasjon/no/index.html"
   :terms-verified-on "2026-11-18"
-  :notes "enheter の全件 JSON（毎晩更新）。enkeltpersonforetak（ENK）は取り込まない。役割（roller）は扱わない"
+  :notes "enheter の全件 JSON（毎晩更新）。enkeltpersonforetak（ENK）は取り込まない。役割（roller）は扱わない。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
   :status :implemented :parser itonami.legal-entity.no-brreg}
  {:id :dk-cvr :jurisdiction "DK" :registry "CVR" :status :planned :terms-verified-on nil
-  :blocked-reason "Erhvervsstyrelsen の現行の利用条件を一次資料で確認できなかった。非公式の写しには機械的・体系的な収集を禁じる条項がある。system-til-system の利用条件と reklamebeskyttelse の扱いを確認するまで受け付けない"}
+  :blocked-reason "Erhvervsstyrelsen の現行の利用条件を一次資料で確認できなかった。非公式の写しには機械的・体系的な収集を禁じる条項がある。system-til-system の利用条件と reklamebeskyttelse の扱いを確認するまで受け付けない。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :fi-prh :jurisdiction "FI" :registry "PRH YTJ open data"
   :access :bulk-json :key-required? false :license "CC BY 4.0"
   :url "https://avoindata.prh.fi/opendata-ytj-api/v3/all_companies"
   :spec-url "https://avoindata.prh.fi/opendata-ytj-api/v3/schema?lang=en"
   :spec-sha256 "cac658d4d4cf5d2b5bd55cd7f41f2bd1741cbfc7323bccd03960f5d04181087e"
   :terms-verified-on "2026-11-18"
-  :notes "OpenAPI 定義の license が CC BY 4.0。会社形態がコード表 YRMU にないものは取り込まない。all_companies の応答の外側の形（配列か、companies を持つ object か）は未確認"
+  :notes "OpenAPI 定義の license が CC BY 4.0。会社形態がコード表 YRMU にないものは取り込まない。all_companies の応答の外側の形（配列か、companies を持つ object か）は未確認。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
   :status :implemented :parser itonami.legal-entity.fi-prh}
  {:id :ee-ariregister :jurisdiction "EE" :registry "e-Business Register" :status :planned :terms-verified-on nil
   :license-candidate "CC BY 4.0（avaandmed.ariregister.rik.ee の License information のリンク先、2026-11-18 確認）"
-  :blocked-reason "利用条件（CC BY 4.0）は確認できたが、基本データ（lihtandmed）CSV の列名を一次資料で確認できなかった。ダウンロードにはライセンスへの同意が要る"}
+  :blocked-reason "利用条件（CC BY 4.0）は確認できたが、基本データ（lihtandmed）CSV の列名を一次資料で確認できなかった。ダウンロードにはライセンスへの同意が要る。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :be-kbo :jurisdiction "BE" :registry "KBO/BCE" :status :planned :terms-verified-on nil
-  :blocked-reason "KBO Open Data はダウンロードに登録と利用条件への同意が要り、商用の再利用は有償（年 30,000 EUR とする情報あり、二次情報）。公式の利用条件の本文を確認するまで受け付けない"}
+  :blocked-reason "KBO Open Data はダウンロードに登録と利用条件への同意が要り、商用の再利用は有償（年 30,000 EUR とする情報あり、二次情報）。公式の利用条件の本文を確認するまで受け付けない。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :cz-ares :jurisdiction "CZ" :registry "ARES" :status :planned :terms-verified-on nil
-  :blocked-reason "財務省は「運用条件に従えば誰でも使える」とするが、運用条件の本文（照会数の上限・遮断の条件）とライセンスを一次資料で確認できなかった"}
+  :blocked-reason "財務省は「運用条件に従えば誰でも使える」とするが、運用条件の本文（照会数の上限・遮断の条件）とライセンスを一次資料で確認できなかった。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :ch-zefix :jurisdiction "CH" :registry "Zefix" :status :planned :terms-verified-on nil
-  :blocked-reason "opendata.swiss には Zefix の一部しかなく、Zefix REST API の利用条件を一次資料で確認できなかった"}
+  :blocked-reason "opendata.swiss には Zefix の一部しかなく、Zefix REST API の利用条件を一次資料で確認できなかった。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :nl-kvk :jurisdiction "NL" :registry "KVK" :status :planned :terms-verified-on nil
   :license-candidate "Open Dataset Basis Bedrijfsgegevens は CC BY 4.0（developers.kvk.nl、2026-11-18 確認）"
-  :blocked-reason "無償のオープンデータは BV・NV の属性だけで、会社名と KVK 番号を含まない（共通スキーマの名称を満たせない）。名称を含む API は有償"}
+  :blocked-reason "無償のオープンデータは BV・NV の属性だけで、会社名と KVK 番号を含まない（共通スキーマの名称を満たせない）。名称を含む API は有償。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :us-sec-edgar :jurisdiction "US" :registry "SEC EDGAR"
   :access :bulk-json :key-required? false
   :license "SEC.gov の情報は公開情報で、SEC の許可なく複製・再配布できる。出典として SEC を示す。SEC の印章・ロゴ・EDGAR の商標は使わない（SEC.gov「Privacy and Security Policy」）"
@@ -75,7 +75,7 @@
                       :source-url "https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data"}
   :terms-verified-on "2026-11-18"
   :evidence "submissions JSON の項目名を 2026-11-18 に公開会社 1 社の応答で確認（cik, entityType, name, stateOfIncorporation, addresses.business, lei）"
-  :notes "submissions.zip（毎晩更新）か data.sec.gov/submissions。entityType が operating のものだけを取り込み、個人の filer は取り込まない。EDGAR は存続状態を持たないので status は :unknown"
+  :notes "submissions.zip（毎晩更新）か data.sec.gov/submissions。entityType が operating のものだけを取り込み、個人の filer は取り込まない。EDGAR は存続状態を持たないので status は :unknown。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
   :status :implemented :parser itonami.legal-entity.us-sec-edgar}
  {:id :ca-ised :jurisdiction "CA" :registry "ISED Corporations Canada"
   :access :bulk-csv :key-required? false :license "Open Government Licence - Canada"
@@ -83,10 +83,10 @@
   :terms-url "https://open.canada.ca/en/open-government-licence-canada"
   :terms-verified-on "2026-11-18"
   :evidence "CSV の見出し 18 列を 2026-11-18 に active-cbca と inactive-or-dissolved-non-cbca の英語版の先頭行で確認"
-  :notes "連邦法人だけ（州法人は含まない）。英語版の 4 ファイルを使う。Status の値は Active のほかを確認できていない。取締役の人数の列は取り込まない"
+  :notes "連邦法人だけ（州法人は含まない）。英語版の 4 ファイルを使う。Status の値は Active のほかを確認できていない。取締役の人数の列は取り込まない。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
   :status :implemented :parser itonami.legal-entity.ca-ised}
  {:id :br-cnpj :jurisdiction "BR" :registry "Receita Federal CNPJ" :status :planned :terms-verified-on nil
-  :blocked-reason "ライセンスの記載が二次情報で食い違う（dados.gov.br は CC BY、別の情報では Receita の公開場所が CC BY-ND 3.0 で改変不可）。dados.gov.br と Receita Federal の一次資料を取得できなかった。Empresas には個人事業主（MEI など）の氏名が入るため、除外の規則も要る"}
+  :blocked-reason "ライセンスの記載が二次情報で食い違う（dados.gov.br は CC BY、別の情報では Receita の公開場所が CC BY-ND 3.0 で改変不可）。dados.gov.br と Receita Federal の一次資料を取得できなかった。Empresas には個人事業主（MEI など）の氏名が入るため、除外の規則も要る。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :au-abr :jurisdiction "AU" :registry "Australian Business Register"
   :access :bulk-xml :key-required? false :license "CC BY 3.0 AU"
   :url "https://data.gov.au/data/dataset/abn-bulk-extract"
@@ -94,12 +94,12 @@
   :spec-sha256 "e19f5f991fdc3498e71faaf9f88574cab5d1d7d3cc23015c324e2f75ca45c670"
   :terms-verified-on "2026-11-18"
   :evidence "ライセンスは data.gov.au の CKAN package_show（license_id cc-by、Creative Commons Attribution 3.0 Australia）で 2026-11-18 に確認"
-  :notes "個人事業主（LegalEntity / IND）は取り込まない。家族名を含みうる信託・組合も取り込まず、PRV・PUB・COP・OIE だけを受け付ける。XML から map への変換は未実装"
+  :notes "個人事業主（LegalEntity / IND）は取り込まない。家族名を含みうる信託・組合も取り込まず、PRV・PUB・COP・OIE だけを受け付ける。XML から map への変換は未実装。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
   :status :implemented :parser itonami.legal-entity.au-abr}
  {:id :nz-nzbn :jurisdiction "NZ" :registry "NZBN" :status :planned :terms-verified-on nil
-  :blocked-reason "一括データは Companies Office の Bulk Data Access Agreement への同意が要り、利用目的を超えると NZBN API（登録が要る）を求められる。NZBN API の利用条件を一次資料で確認できなかった。同意は owner の判断"}
+  :blocked-reason "一括データは Companies Office の Bulk Data Access Agreement への同意が要り、利用目的を超えると NZBN API（登録が要る）を求められる。NZBN API の利用条件を一次資料で確認できなかった。同意は owner の判断。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :za-cipc :jurisdiction "ZA" :registry "CIPC" :status :planned :terms-verified-on nil
-  :blocked-reason "公式の一括データ・公開 API が見つからない。二次情報では CIPC の利用条件が機械的な一括取得を禁じ、再販にはライセンスが要る。新しいオープンデータポータルを準備中との報道（2026-07）があり、公開を待つ"}
+  :blocked-reason "公式の一括データ・公開 API が見つからない。二次情報では CIPC の利用条件が機械的な一括取得を禁じ、再販にはライセンスが要る。新しいオープンデータポータルを準備中との報道（2026-07）があり、公開を待つ。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :il-rasham :jurisdiction "IL" :registry "Israeli Corporations Authority" :status :planned :terms-verified-on nil
   :license-candidate "data.gov.il のデータセット ica_companies のライセンス欄は Other (Open)（CKAN package_show、2026-11-18 確認）"
-  :blocked-reason "data.gov.il の利用条件の本文（出典の示し方・商用利用）を一次資料で取得できなかった（terms ページが 403/404）。列名は datastore_search で確認済み"}]
+  :blocked-reason "data.gov.il の利用条件の本文（出典の示し方・商用利用）を一次資料で取得できなかった（terms ページが 403/404）。列名は datastore_search で確認済み。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}]
