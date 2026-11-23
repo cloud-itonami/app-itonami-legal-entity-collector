@@ -122,10 +122,13 @@
     (nth backoff-schedule-ms (dec attempt))))
 
 (defn retry-wait-ms
-  "失敗応答 {:status s :attempt n} が再試行に値するか。値すれば待機ミリ秒、しなければ nil。"
-  [{:keys [status attempt]}]
-  (when (retryable-status? status)
-    (backoff-ms attempt)))
+  "失敗応答 {:status s :attempt n :waited-ms w} が再試行に値するか。値すれば待機ミリ秒、しなければ nil。
+  :waited-ms はこれまでのバックオフ待機の総和（省略時は 0）。次の待機を足すと
+  max-total-wait-ms（30 秒）を超える場合は、待たずに nil を返す（超過したら停止）。"
+  [{:keys [status attempt waited-ms]}]
+  (let [b (when (retryable-status? status) (backoff-ms attempt))]
+    (when (and (some? b) (<= (+ (or waited-ms 0) b) max-total-wait-ms))
+      b)))
 
 (defn throttle-wait-ms
   "任意の 60 秒窓に 500 件を超えないための待機ミリ秒（スライディングウィンドウ）。
@@ -142,3 +145,54 @@
   (let [b (retry-wait-ms {:status status :attempt attempt})]
     (when (some? b)
       (max b (throttle-wait-ms now-ms (or call-times []))))))
+
+(def min-interval-ms
+  "送信間隔の下限（500件/分の平均間隔 120ms。連続送信のバーストを避けるため）。"
+  120)
+
+(defn pace-wait-ms
+  "次の送信まで待つミリ秒。最後の送信から min-interval-ms 以上の間隔を保ち、
+  かつ任意の 60 秒窓に max-requests-per-minute 件を超えないための待機。"
+  [now-ms call-times]
+  (let [last-ms (last call-times)
+        interval-wait (if last-ms (max 0 (- (+ last-ms min-interval-ms) now-ms)) 0)
+        ready-ms (+ now-ms interval-wait)]
+    (+ interval-wait (throttle-wait-ms ready-ms call-times))))
+
+(defn new-request-state
+  "1 run 内で引き継ぐ取得状態（送信時刻の履歴と照会キャッシュ）。atom は使わない。"
+  []
+  {:call-times [] :cache {}})
+
+(defn fetch-with-retry
+  "1 照会を実行する。:fetch（照会キー → 応答 {:status ...}）、:now（→ ミリ秒）、:sleep（ミリ秒）
+  は注入する。この関数はネットワークと時計に直接触れない。
+  :state は new-request-state の map で、呼び出し側が次の照会に引き継ぐ。
+  戻り値は {:response :attempts :waited-ms :deduped? :state}（:waited-ms はバックオフ待機の総和）。
+  - 同じ :request-key を 1 run 内で 2 回渡すと、2 回目は送信せず初回応答のキャッシュを返す。
+  - 429 と 5xx のみ再試行する（指数バックオフ 1s → 2s → 4s → 8s、上限 4 回）。
+    バックオフ総和が max-total-wait-ms（30 秒）を超える場合は待たずに停止する。
+  - 送信前に pace-wait-ms 分だけ :sleep で待つ（120ms 間隔と 60 秒窓に 500 件まで）。"
+  [{:keys [fetch now sleep request-key state]
+    :or {state (new-request-state)}}]
+  (if (and (some? request-key) (contains? (:cache state) request-key))
+    {:response (get (:cache state) request-key) :attempts 0 :waited-ms 0
+     :deduped? true :state state}
+    (loop [attempt 1 waited 0 st state]
+      (let [pw (pace-wait-ms (now) (:call-times st))]
+        (when (pos? pw) (sleep pw))
+        (let [st (update st :call-times conj (now))
+              resp (fetch request-key)
+              status (:status resp)
+              st (if (some? request-key)
+                   (assoc-in st [:cache request-key] resp)
+                   st)]
+          (if (retryable-status? status)
+            (let [b (retry-wait-ms {:status status :attempt attempt :waited-ms waited})]
+              (if (nil? b)
+                {:response resp :attempts attempt :waited-ms waited
+                 :deduped? false :state st}
+                (do (sleep b)
+                    (recur (inc attempt) (+ waited b) st))))
+            {:response resp :attempts attempt :waited-ms waited
+             :deduped? false :state st}))))))

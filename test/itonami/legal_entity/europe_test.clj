@@ -6,6 +6,7 @@
             [itonami.legal-entity.collect :as collect]
             [itonami.legal-entity.csv :as csv]
             [itonami.legal-entity.cz-ares :as cz]
+            [itonami.legal-entity.ee-ariregister :as ee]
             [itonami.legal-entity.fi-prh :as fi]
             [itonami.legal-entity.fr-sirene :as fr]
             [itonami.legal-entity.gb-companies-house :as gb]
@@ -220,6 +221,61 @@
     (testing "負の対照: 6 桁コードは拒否"
       (is (= [4] (map :index (:rejected res)))))))
 
+(deftest ee-empty-response
+  "EE の空応答（実装は変えない。異常系の取り扱いだけ固定する）。"
+  (testing "空の入力では記録も拒否も生まない"
+    (is (= [] (csv/rows [] \;)))
+    (is (= [] (csv/rows [ee-header] \;)) "見出しだけ")
+    (is (= {:source :ee-ariregister :records [] :skipped [] :rejected []}
+           (collect/collect catalog :ee-ariregister [])))
+    (is (= {:source :ee-ariregister :records [] :skipped [] :rejected []}
+           (collect/collect catalog :ee-ariregister [ee-header]))))
+  (testing "空行は列数不足として 1 件拒否"
+    (is (= [{:reject "列数が 1（見出しは 17）"}] (csv/rows [ee-header ""] \;)))
+    (let [res (collect/collect catalog :ee-ariregister [ee-header ""])]
+      (is (= [] (:records res)))
+      (is (= [0] (map :index (:rejected res))))))
+  (testing "空 map は problems で拒否（record にならない）"
+    (is (:reject (ee/normalize {})))))
+
+(deftest ee-column-mismatch
+  "EE の列数不一致（17 列でない行は {:reject ...}）。"
+  (testing "3 列・18 列の行はどちらも拒否"
+    (is (= [{:reject "列数が 3（見出しは 17）"}]
+           (csv/rows [ee-header "a;b;c"] \;)))
+    (is (= [{:reject "列数が 18（見出しは 17）"}]
+           (csv/rows [ee-header (str/join ";" (concat (repeat 17 "x") ["extra"]))] \;))))
+  (testing "collect でも記録にならず拒否に回る"
+    (let [res (collect/collect catalog :ee-ariregister [ee-header "a;b;c"])]
+      (is (= [] (:records res)))
+      (is (= [0] (map :index (:rejected res))))
+      (is (every? :reject (:rejected res))))))
+
+(deftest ee-bom-csv
+  "EE の BOM 付き CSV（見出し先頭の BOM で最初の列名が壊れない）。"
+  (let [bom-header (str (char 0xFEFF) ee-header)
+        rows (csv/rows [bom-header (nth ee-lines 1)] \;)
+        res (collect/collect catalog :ee-ariregister [bom-header (nth ee-lines 1)])]
+    (is (= "FICTIVE HOLDING OÜ" (get (first rows) "nimi")))
+    (is (= ["ee-ariregister:99999999"] (map :entity/id (:records res))))))
+
+(deftest ee-semicolon-rows
+  "EE の ; 区切り（17 列に拆解され、カンマを含む項目は 1 項目のまま）。"
+  (let [[row] (csv/rows [ee-header (nth ee-lines 1)] \;)
+        [comma-row] (csv/rows [ee-header (nth ee-lines 6)] \;)]
+    (is (= 17 (count row)))
+    (is (= "FICTIVE HOLDING OÜ" (get row "nimi")))
+    (is (= "R" (get row "ettevotja_staatus")))
+    (is (= 17 (count comma-row)))
+    (is (= "Tallinn, Regati pst 1" (get comma-row "ettevotja_aadress")) "カンマで割れない")))
+
+(deftest ee-non-legal-person-excluded
+  "EE の非法人除外（FIE は取り込まず skip）。"
+  (let [res (collect/collect catalog :ee-ariregister [ee-header (nth ee-lines 4)])]
+    (is (= [] (:records res)))
+    (is (= [] (:rejected res)))
+    (is (= [{:index 0 :skip "füüsilisest isikust ettevõtja（個人事業主）"}] (:skipped res)))))
+
 ;; --- CZ -------------------------------------------------------------------
 
 ;; 項目名は 2026-11-23 に取得した OpenAPI 定義（v1.4.0）の EconomickySubjekt / Adresa どおり。
@@ -305,6 +361,106 @@
     (is (not-any? cz/retryable-status? [200 400 401 404 428 600 nil]))
     (is (nil? (cz/retry-wait-ms {:status 404 :attempt 1})))
     (is (nil? (cz/next-wait-ms {:status 404 :attempt 1 :now-ms 0 :call-times []})))))
+
+
+(defn- fake-run
+  "応答の列 statuses を順に返す fake fetch で fetch-with-retry を 1 照会流す。
+  時計と sleep は注入（実時間に眠らない）。{:res :sent :final-time} を返す。"
+  [statuses]
+  (let [t (atom 0)
+        q (atom (vec statuses))
+        sent (atom [])
+        fetch (fn [_k]
+                (swap! sent conj @t)
+                (let [s (first @q)]
+                  (swap! q (fn [v] (subvec v 1)))
+                  {:status s}))
+        res (cz/fetch-with-retry {:fetch fetch
+                                  :now (fn [] @t)
+                                  :sleep (fn [ms] (swap! t + ms))
+                                  :request-key :q1
+                                  :state (cz/new-request-state)})]
+    {:res res :sent @sent :final-time @t}))
+
+(deftest cz-ares-retry-executor
+  "fetch-with-retry（注入時計。実ネットワーク・実 sleep なし）。"
+  (testing "429 → 再試行 → 成功"
+    (let [{:keys [res sent final-time]} (fake-run [429 200])]
+      (is (= 200 (get-in res [:response :status])))
+      (is (= 2 (:attempts res)))
+      (is (= 1000 (:waited-ms res)))
+      (is (= [0 1000] sent))
+      (is (= 1000 final-time))
+      (is (false? (:deduped? res)))))
+  (testing "5xx が続く場合は再試行 4 回（総試行 5 回）で止まり、総待機は 30 秒を超えない"
+    (let [{:keys [res sent]} (fake-run [500 500 500 500 500 500])]
+      (is (= 500 (get-in res [:response :status])))
+      (is (= 5 (:attempts res)))
+      (is (= 15000 (:waited-ms res)))
+      (is (<= (:waited-ms res) cz/max-total-wait-ms))
+      (is (= [0 1000 3000 7000 15000] sent))))
+  (testing "バックオフ総和に次の待機を足して 30 秒を超える場合は待たずに停止"
+    (is (nil? (cz/retry-wait-ms {:status 503 :attempt 4 :waited-ms 25000})))
+    (is (= 8000 (cz/retry-wait-ms {:status 503 :attempt 4 :waited-ms 22000}))
+        "ちょうど 30 秒は許す"))
+  (testing "400/404 は再試行せず 1 回だけ送る"
+    (doseq [s [400 401 404]]
+      (let [{:keys [res sent]} (fake-run [s 200])]
+        (is (= s (get-in res [:response :status])))
+        (is (= 1 (:attempts res)))
+        (is (= 0 (:waited-ms res)))
+        (is (= [0] sent))))))
+
+(deftest cz-ares-rate-limit
+  "レート制限（500件/分）。注入した送信時刻で上限を超えないことを確かめる。"
+  (testing "間隔は 120ms 以上、任意の 60 秒窓は 500 件以下"
+    (let [t (atom 0)
+          sent (atom [])
+          fetch (fn [_k] (swap! sent conj @t) {:status 200})
+          run (fn [state k]
+                (cz/fetch-with-retry {:fetch fetch
+                                      :now (fn [] @t)
+                                      :sleep (fn [ms] (swap! t + ms))
+                                      :request-key k
+                                      :state state}))
+          final (loop [i 0 state (cz/new-request-state)]
+                  (if (>= i 600)
+                    state
+                    (recur (inc i) (:state (run state (keyword (str "k" i)))))))
+          times (:call-times final)]
+      (is (= 600 (count times)))
+      (is (= 60000 (nth times 500)) "501 件目は最初の送信が窓から外れるまで待つ")
+      (is (every? (fn [[a b]] (>= (- b a) cz/min-interval-ms))
+                  (partition 2 1 times))
+          "120ms 未満の間隔はない（バーストしない）")
+      (is (every? (fn [i]
+                    (let [ti (nth times i)]
+                      (<= (count (filter #(< % (+ ti cz/rate-window-ms))
+                                         (drop i times)))
+                          cz/max-requests-per-minute)))
+                  (range (count times)))
+          "任意の 60 秒窓に 500 件を超えない"))))
+
+(deftest cz-ares-dedupe
+  "同一照会の重複（1 run 内で 2 回目は送信しない）。"
+  (let [t (atom 0)
+        calls (atom 0)
+        fetch (fn [_k] (swap! calls inc) {:status 200 :body {:n @calls}})
+        run (fn [state k]
+              (cz/fetch-with-retry {:fetch fetch
+                                    :now (fn [] @t)
+                                    :sleep (fn [ms] (swap! t + ms))
+                                    :request-key k
+                                    :state state}))
+        first (run (cz/new-request-state) :same-query)
+        second (run (:state first) :same-query)
+        other (run (:state second) :other-query)]
+    (is (= 2 @calls) "2 回目の同一照会は送信しない（別照会の 1 回で計 2 回）")
+    (is (false? (:deduped? first)))
+    (is (true? (:deduped? second)))
+    (is (= 0 (:attempts second)))
+    (is (= (:response first) (:response second)) "キャッシュを返す")
+    (is (false? (:deduped? other)))))
 
 ;; --- カタログ -------------------------------------------------------------
 
