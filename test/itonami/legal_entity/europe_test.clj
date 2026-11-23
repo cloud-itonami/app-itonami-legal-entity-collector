@@ -26,7 +26,8 @@
     (is (every? ids/no-orgnr? ["999000002" "999000010" "999000029"]))
     (is (every? ids/fi-business-id? ["9990000-8" "9990001-6" "9990002-4"]))
     (is (ids/gb-company-number? "ZZ000001"))
-    (is (ids/ee-registry-code? "99999999")))
+    (is (ids/ee-registry-code? "99999999"))
+    (is (every? ids/cz-ico? ["99900009" "99900017" "25596641"])))
   (testing "負の対照"
     (is (not (ids/fr-siren? "999900005")))
     (is (not (ids/no-orgnr? "999000003")))
@@ -34,7 +35,9 @@
     (is (not (ids/fi-business-id? "99900008")) "ハイフンなし")
     (is (not (ids/gb-company-number? "zz000001")))
     (is (not (ids/gb-company-number? "ZZ00001")) "7 文字")
-    (is (not (ids/ee-registry-code? "9999999")) "7 桁")))
+    (is (not (ids/ee-registry-code? "9999999")) "7 桁")
+    (is (not (ids/cz-ico? "99900008")) "チェックデジット不一致")
+    (is (not (ids/cz-ico? "9990000")) "7 桁")))
 
 ;; --- GB -------------------------------------------------------------------
 
@@ -216,16 +219,56 @@
     (testing "負の対照: 6 桁コードは拒否"
       (is (= [4] (map :index (:rejected res)))))))
 
+;; --- CZ -------------------------------------------------------------------
+
+;; 項目名は 2026-11-23 に取得した OpenAPI 定義（v1.4.0）の EconomickySubjekt / Adresa どおり。
+;; 番号はチェックデジットだけ正しい架空の値（99900009 等）。実在の登記データは使わない。
+
+(def cz-subjekty
+  [{:ico "99900009" :obchodniJmeno "FIKČNÍ S.R.O." :pravniForma "112"
+    :datumVzniku "2010-03-04" :datumAktualizace "2026-11-20"
+    :sidlo {:kodStatu "CZ" :nazevUlice "Fikční ulice" :cisloDomovni 123
+            :cisloOrientacni 4 :cisloOrientacniPismeno "a" :nazevObce "Testov"
+            :psc 17000 :textovaAdresa "Fikční ulice 123/4a, Testov"}}
+   {:ico "99900017" :obchodniJmeno "FIKČNÍ K.S." :pravniForma "113"
+    :datumVzniku "2001-02-03" :datumZaniku "2026-10-31" :datumAktualizace "2026-10-31"}
+   {:ico "99900025" :obchodniJmeno "FIKČNÍ ŽIVNOSTNÍK" :pravniForma "101"
+    :datumVzniku "2015-01-01"}
+   {:ico "99900008" :obchodniJmeno "BAD ICO SPOL. S.R.O." :pravniForma "112"}
+   {:obchodniJmeno "NO ICO ID SPOL. S.R.O." :icoId "ARES_99900041" :pravniForma "112"}
+   {:icoId "99900050" :obchodniJmeno "FIKČNÍ ICOID SPOL. S.R.O." :pravniForma "112"
+    :datumVzniku "2020-05-06"}])
+
+(deftest cz-ares
+  (let [res (collect/collect catalog :cz-ares cz-subjekty)
+        [a b f] (:records res)]
+    (is (= ["cz-ares:99900009" "cz-ares:99900017" "cz-ares:99900050"]
+           (map :entity/id (:records res))))
+    (is (every? schema/valid? (:records res)))
+    (is (= [:active "2010-03-04" "2026-11-20" {:scheme :cz-pravni-forma :code "112"}
+            {:country "CZ" :street "Fikční ulice 123/4a" :locality "Testov"
+             :postal-code "17000" :full "Fikční ulice 123/4a, Testov"}]
+           [(:entity/status a) (:entity/registered-on a) (get-in a [:source :updated-on])
+            (:entity/legal-form a) (:entity/address a)]))
+    (is (= [:closed "2026-10-31" nil]
+           [(:entity/status b) (:entity/closed-on b) (:entity/address b)]))
+    (testing "ico が無く icoId（8桁）のみは ico として受け付ける"
+      (is (= ["cz-ares:99900050" :active] [(:entity/id f) (:entity/status f)])))
+    (testing "個人事業主は取り込まない"
+      (is (= [{:index 2 :skip "fyzická osoba podnikající（個人事業主）"}] (:skipped res))))
+    (testing "負の対照: チェックデジット不一致、IČO 未割当の icoId"
+      (is (= [3 4] (map :index (:rejected res)))))))
+
 ;; --- カタログ -------------------------------------------------------------
 
 (deftest europe-catalog
   (let [by-id (into {} (map (juxt :id identity) catalog))]
-    (testing "利用条件と仕様を確認した 5 ソースだけ実装済み"
-      (doseq [id [:gb-companies-house :fr-sirene :no-brreg :fi-prh :ee-ariregister]]
+    (testing "利用条件と仕様を確認した 6 ソースだけ実装済み"
+      (doseq [id [:gb-companies-house :fr-sirene :no-brreg :fi-prh :ee-ariregister :cz-ares]]
         (is (= :implemented (get-in by-id [id :status])) (name id))
         (is (every? (by-id id) [:license :url :terms-verified-on :parser]) (name id))))
     (testing "確認できなかったソースは受け付けない"
-      (doseq [id [:dk-cvr :be-kbo :cz-ares :ch-zefix :nl-kvk]]
+      (doseq [id [:dk-cvr :be-kbo :ch-zefix :nl-kvk]]
         (is (not= :implemented (get-in by-id [id :status])) (name id))
         (is (string? (get-in by-id [id :blocked-reason])) (name id))
         (is (:error (collect/collect catalog id [])) (name id))))))

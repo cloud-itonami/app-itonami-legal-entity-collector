@@ -11,7 +11,8 @@
    :entity/jurisdiction-detail \"US-DE\"
    :entity/name-en  :entity/name-kana
    :entity/legal-form {:scheme kw :code str :label str}
-   :entity/address {:country :region :locality :street :postal-code}
+   :entity/address {:country :region :locality :street :postal-code :full}
+   ;; :full は住所全体の原文（分割できない住所の切り分け）。:street は街路名の部分のみ。
    :entity/registered-on \"YYYY-MM-DD\"  :entity/closed-on \"YYYY-MM-DD\"
    :source {:id kw :updated-on str :attribution str :modified? true}}
 
@@ -51,6 +52,7 @@
    :ca-corporation-number ids/ca-corporation-number?
    :ca-business-number ids/ca-business-number?
    :ee-registry-code ids/ee-registry-code?
+   :cz-ico ids/cz-ico?
    :registration-number #(and (string? %) (<= 1 (count %) 64))})
 
 (defn identifier-problems [{:keys [scheme value]}]
