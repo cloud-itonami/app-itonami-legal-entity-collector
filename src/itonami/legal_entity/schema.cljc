@@ -14,20 +14,23 @@
    :entity/registered-on \"YYYY-MM-DD\"  :entity/closed-on \"YYYY-MM-DD\"
    :source {:id kw :updated-on str :attribution str :modified? true}}
 
-  NZ 由来レコードの設計制約（docs/adr/ADR-001-nz-bulkdata-usage-constraints.md）。
+  NZ 由来レコードの設計制約（docs/adr/2026-11-23-nz-bulkdata-usage-constraints.md）。
   NZ は BDAA 申請保留（owner 判断 2026-11-23）。設計前提は NZBN API 経路のみで、
   NZBN API の利用条件は未確認（未確認のまま。推測で埋めない）。実データ取得は
   NZBN API の条件が揃うまでしない。
   NZ 由来の :source は BDAA 条項（4.4(3) / 4.6 等の契約条項）を契約として継承しない
   （BDAA を用いない間は適用対象外）。ただし設計制約として、由来が NZ のレコードは
   マーケティング・リード獲得用途に用いないこと（禁止、既定）と、第三者に渡さないこと
-  （非渡し方針）を維持する。
+  （非渡し方針）を維持する。BDAA を締結しないため同 4.4(3) は法的拘束力を持たない
+  （方針として自ら採用するもの）。アプリ内表示は可（鮮度管理を方針として行う。
+  BDAA 4.6 の契約義務としては適用対象外）。エクスポート不可。アプリ内表示と外部への
+  持出しは別。
 
   出所表示・加工明示（:source {:attribution ... :modified? ...}）は契約要件ではなく、
   公的データ一般原則として行う（契約が根拠ではない）。
 
   個人の情報（氏名・住所・生年月日など）は入れない。個人情報保護法の条番号対応表は
-  docs/adr/ADR-001-nz-bulkdata-usage-constraints.md を参照。"
+  docs/adr/2026-11-23-nz-bulkdata-usage-constraints.md を参照。"
   (:require [itonami.legal-entity.ids :as ids]))
 
 (def statuses #{:active :inactive :closed :unknown})
