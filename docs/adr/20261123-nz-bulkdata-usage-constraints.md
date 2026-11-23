@@ -1,8 +1,8 @@
-# 2026-11-23: NZ 利用制約（設計制約）
+# 20261123: NZ 利用制約（設計制約）
 
-- **状態**: Accepted (2026-11-23, Legal)。2026-11-23 owner 決定（BDAA 申請保留、NZBN API 経路のみ）により設計前提を改訂。2026-11-23 Organizer 是正により、BDAA 4.4(3) の根拠付け（法的拘束力を持たないことを明記）と表示／持出しの線を改訂。
+- **状態**: Accepted (2026-11-23, Legal)。2026-11-23 owner 決定（BDAA 申請保留、NZBN API 経路のみ）により設計前提を改訂。2026-11-23 Organizer 是正により、BDAA 4.4(3) の根拠付け（法的拘束力を持たないことを明記）と表示／持出しの線を改訂。ファイルは org 慣習（YYYYMMDD-slug.md）に合わせ改名した（旧: ADR-001-nz-bulkdata-usage-constraints.md。blocked-summary の「ADR-001」言及との対応付けのため旧名を残す）。
 - **対象**: NZ Companies Office 由来データ（BDAA / Bulk Data Access Agreement を含む）
-- **設計前提**: **BDAA は申請しない・保留（owner 判断 2026-11-23）。設計前提は NZBN API 経路のみ**。NZBN API の利用条件は未確認（確認は別 worker が一次資料で行い、未確認のまま。推測で埋めない）。
+- **設計前提**: **BDAA は申請しない・保留（owner 判断 2026-11-23）。設計前提は NZBN API 経路のみ**。NZBN API の利用条件は一部確認済み（2026-11-23、別 worker の一次資料確認。詳細は `docs/sources/blocked-summary-20261123.md` の「NZ の節」を参照。再配布の範囲とレート制限は未確認のため、推測で埋めない）。
 - **条文（参考情報、適用対象外）**: https://companiesoffice.govt.nz/data-services/ways-to-get-our-data/bulk-data-access-agreement
 - **前提**: この ADR は AWAI-3894 の着手前に読む前提の設計制約である。AWAI-3894 の設計・実装は本 ADR の制約に従い、本 ADR に反する実装は行わない。
 - **関連**: Linear AWAI-3186（親）、AWAI-3188。`sources/catalog.edn` の `:nz-nzbn` エントリ（現状のまま、NZBN API 経路の条件は推測で決めない）。
@@ -20,7 +20,7 @@ NZ Companies Office の BulkData は、Bulk Data Access Agreement（BDAA）へ�
 ### 1. 設計前提（owner 決定 2026-11-23）
 
 - **BDAA は申請しない・保留**。BDAA の申請主体（組織・Authorised Person）の選定、契約・登録手続きは本 ADR の範囲外であり、行わない。
-- **設計前提は NZBN API 経路のみ**。NZBN API の利用条件（登録・同意・料金・用途制限など）は未確認である。確認は別 worker が一次資料で行い、確認が終わるまでは未確認のままとなり、推測で決めない。`sources/catalog.edn` の NZ エントリは現状のままとする。
+- **設計前提は NZBN API 経路のみ**。NZBN API の利用条件（登録・同意・料金・用途制限など）は、本 ADR では確定しない。一部は 2026-11-23 に別 worker が一次資料で確認済みであり、確認結果（確認済み項目と未確認項目の内訳）は `docs/sources/blocked-summary-20261123.md` の「NZ の節」に記録されている。確認できていない項目を推測で決めない。`sources/catalog.edn` の NZ エントリは現状のまま（`:status :planned`、`:terms-verified-on nil`）とする。
 - **実データ取得はまだしない**。NZBN API の利用条件が揃うまで、NZ 由来の実データの取得は行わない。本 ADR は NZ データの取得を許可するものではなく、その利用制約を記録するものである。
 
 ### 2. BDAA 条項は「BDAA を用いない間は適用対象外」
@@ -78,6 +78,6 @@ BDAA を用いない場合も、以下の方針を設計制約として残す。
 
 ## 関連リソース
 
-- 19 法域の blocked 理由の一覧は `docs/sources/blocked-summary-20261123.md`（PR #7）を参照。NZ 行の最新は本 ADR が正である（`docs/sources/blocked-summary-20261123.md` は PR #7 のブランチのため本ブランチには無い）。
+- 19 法域の blocked 理由の一覧は `docs/sources/blocked-summary-20261123.md`（PR #7、マージ済み）を参照。**NZ の（設計制約の）最新は本 ADR が正である**。NZBN API の利用条件の確認結果（確認済み項目と未確認項目の内訳）は blocked-summary の「NZ の節」を参照する。なお blocked-summary の「ADR-001」言及は本ファイル（旧: ADR-001-nz-bulkdata-usage-constraints.md）を指す。
 
 ---
