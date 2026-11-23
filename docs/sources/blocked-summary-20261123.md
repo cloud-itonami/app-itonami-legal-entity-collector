@@ -86,6 +86,25 @@
 - **BE**: ライセンス accept と利用目的の申告要否。owner 判断待ち（Organizer が item 20 で確認中）。手続きはしていない。
 - **NL**: 有償 API の契約要否。owner 判断待ち（Organizer が item 20 で確認中）。勝手に契約していない。
 
+## 実装済み12の表示義務点検（2026-11-23、Organizer 指定）
+
+EE/CZ/CH/US/GB/FR/NO/FI/JP/CA/AU/GLEIF の12について、ライセンス表示義務（attribution）が満たされているかを1行ずつ点検した。不足分は `sources/catalog.edn` の該当エントリに `:attribution` 属性として追記した（表示義務は code ではなくデータ定義の属性として持たせる。`src`・`test`・profile は触っていない。parser の動作は変えていない）。EE/CZ/CH は catalog の `:status` が `:planned` のまま（PR #5 本文と差があるが、本節では状態を変えていない）。
+
+| 法域 | 要求される表示 | 点検結果（catalog への記載） |
+|---|---|---|
+| EE | 出典表示（CC BY 4.0） | `sources/catalog.edn:64` に `:attribution` を追記 |
+| CZ | 「ARES」を出所として表示、500件/分の上限を守る記述 | `sources/catalog.edn:69` に `:attribution` を追記 |
+| CH | OGD の出典表示、Basic 認証は repo に書かない | `sources/catalog.edn:72` に `:attribution` を追記（認証情報の記載なし） |
+| US | 制限なし | `sources/catalog.edn:80` に `:attribution` を追記（制限なしと明記。SEC の印章・ロゴ・EDGAR 商標を使わない旨は `:license` / `:attribution` 記載どおり） |
+| GB | 制限なし | `sources/catalog.edn:26` に `:attribution` を追記（制限なしと明記。出所表示は慣行として `:license` 記載どおり） |
+| FR | 出典＋最終更新日 | `sources/catalog.edn:36` に `:attribution` を追記 |
+| NO | NLOD の出所表示 | `sources/catalog.edn:45` に `:attribution` を追記 |
+| FI | CC BY 4.0 の出所表示 | `sources/catalog.edn:55` に `:attribution` を追記 |
+| JP | 国税庁の出典＋加工明示 | `sources/catalog.edn:15` に `:attribution` を追記（出典＋加工明示） |
+| CA | OGL-Canada | `sources/catalog.edn:92` に `:attribution` を追記 |
+| AU | CC BY 3.0 AU | `sources/catalog.edn:103` に `:attribution` を追記 |
+| GLEIF | CC0 1.0（表示義務なし） | `sources/catalog.edn:7` に `:attribution` を追記（表示義務なしと明記。任意の出所表示は README の表示例） |
+
 ## 次の一手（AWAI-3894 への送り先）
 
 - AWAI-3894（実データ取得）は Backlog のまま。本 worker はデータセットの取得・取得クライアントの実装をしていない。

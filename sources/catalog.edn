@@ -4,6 +4,7 @@
 ;; 確認するまで parser を足さない。確認できなかった理由は :blocked-reason に書く（AWAI-3224 / AWAI-3225）。
 [{:id :gleif :jurisdiction "*" :registry "GLEIF LEI"
   :access :api :key-required? false :license "CC0 1.0"
+  :attribution "CC0 1.0 — 表示義務なし。任意で GLEIF からの値である旨を示す（README の表示例）"
   :url "https://api.gleif.org/api/v1/lei-records"
   :terms-verified-on "2026-11-18"
   :evidence "API 応答の形を 2026-11-18 に 1 件取得して確認（lei / entity / registration）。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
@@ -11,6 +12,7 @@
  {:id :jp-nta :jurisdiction "JP" :registry "国税庁 法人番号公表サイト"
   :access :bulk-csv :key-required? false
   :license "公共データ利用規約（第 1.0 版）。出典の記載と、加工したことの記載が必要"
+  :attribution "出典：国税庁法人番号公表サイト（国税庁）をもとに Awai Network が加工して作成（出典＋加工明示）"
   :url "https://www.houjin-bangou.nta.go.jp/download/"
   :terms-url "https://www.houjin-bangou.nta.go.jp/riyokiyaku/"
   :spec-url "https://www.houjin-bangou.nta.go.jp/pc/download/images/k-resource-dl.pdf"
@@ -21,6 +23,7 @@
  {:id :gb-companies-house :jurisdiction "GB" :registry "UK Companies House"
   :access :bulk-csv :key-required? false
   :license "Companies House は公開登記情報の利用に規則や条件を課さない（GOV.UK「Public task, copyright and Crown copyright」2.2 節、2019-08-09 更新）。出典として Companies House を示す"
+  :attribution "制限なし（表示義務なし。Organizer 指定 2026-11-23）。平易に出典として Companies House を示す慣行は :license 記載どおり"
   :url "https://download.companieshouse.gov.uk/en_output.html"
   :terms-url "https://www.gov.uk/government/publications/companies-house-accreditation-to-information-fair-traders-scheme/public-task-copyright-and-crown-copyright"
   :spec-url "https://resources.companieshouse.gov.uk/toolsToHelp/pdf/freeDataProductDataset.pdf"
@@ -30,6 +33,7 @@
   :status :implemented :parser itonami.legal-entity.gb-companies-house}
  {:id :fr-sirene :jurisdiction "FR" :registry "INSEE SIRENE"
   :access :bulk-csv :key-required? false :license "Licence Ouverte / Open Licence 2.0"
+  :attribution "出典：INSEE SIRENE（出典＋最終更新日を表示）"
   :url "https://www.data.gouv.fr/fr/datasets/base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret/"
   :spec-url "https://static.data.gouv.fr/resources/base-sirene-des-entreprises-et-de-leurs-etablissements-siren-siret/20260113-143438/stockunitelegale-311-dessin-de-fichier.csv"
   :spec-sha256 "d96b3d9a6fbb4d4275571ba54aceb5dfef7cfc85bb0e07e023af4f610a023e89"
@@ -38,6 +42,7 @@
   :status :implemented :parser itonami.legal-entity.fr-sirene}
  {:id :no-brreg :jurisdiction "NO" :registry "Brønnøysundregistrene Enhetsregisteret"
   :access :bulk-json :key-required? false :license "Norsk lisens for offentlige data (NLOD) 2.0"
+  :attribution "出典：Brønnøysundregistrene（NLOD 2.0 の出所表示）"
   :url "https://data.brreg.no/enhetsregisteret/api/enheter/lastned"
   :spec-url "https://data.brreg.no/enhetsregisteret/api/dokumentasjon/no/index.html"
   :terms-verified-on "2026-11-18"
@@ -47,6 +52,7 @@
   :blocked-reason "Erhvervsstyrelsen の現行の利用条件を一次資料で確認できなかった。非公式の写しには機械的・体系的な収集を禁じる条項がある。system-til-system の利用条件と reklamebeskyttelse の扱いを確認するまで受け付けない。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :fi-prh :jurisdiction "FI" :registry "PRH YTJ open data"
   :access :bulk-json :key-required? false :license "CC BY 4.0"
+  :attribution "出典：PRH YTJ（CC BY 4.0 の出所表示）"
   :url "https://avoindata.prh.fi/opendata-ytj-api/v3/all_companies"
   :spec-url "https://avoindata.prh.fi/opendata-ytj-api/v3/schema?lang=en"
   :spec-sha256 "cac658d4d4cf5d2b5bd55cd7f41f2bd1741cbfc7323bccd03960f5d04181087e"
@@ -55,12 +61,15 @@
   :status :implemented :parser itonami.legal-entity.fi-prh}
  {:id :ee-ariregister :jurisdiction "EE" :registry "e-Business Register" :status :planned :terms-verified-on nil
   :license-candidate "CC BY 4.0（avaandmed.ariregister.rik.ee の License information のリンク先、2026-11-18 確認）"
+  :attribution "出典表示が必要（CC BY 4.0）"
   :blocked-reason "利用条件（CC BY 4.0）は確認できたが、基本データ（lihtandmed）CSV の列名を一次資料で確認できなかった。ダウンロードにはライセンスへの同意が要る。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :be-kbo :jurisdiction "BE" :registry "KBO/BCE" :status :planned :terms-verified-on nil
   :blocked-reason "KBO Open Data はダウンロードに登録と利用条件への同意が要り、商用の再利用は有償（年 30,000 EUR とする情報あり、二次情報）。公式の利用条件の本文を確認するまで受け付けない。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :cz-ares :jurisdiction "CZ" :registry "ARES" :status :planned :terms-verified-on nil
+  :attribution "出所を「ARES」と表示する。照会は 500件/分の上限を守る（Organizer 指定 2026-11-23）"
   :blocked-reason "財務省は「運用条件に従えば誰でも使える」とするが、運用条件の本文（照会数の上限・遮断の条件）とライセンスを一次資料で確認できなかった。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :ch-zefix :jurisdiction "CH" :registry "Zefix" :status :planned :terms-verified-on nil
+  :attribution "出典として Zefix / OGD を表示する（OGD の出典表示）。Basic 認証の情報は repo に書かない"
   :blocked-reason "opendata.swiss には Zefix の一部しかなく、Zefix REST API の利用条件を一次資料で確認できなかった。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :nl-kvk :jurisdiction "NL" :registry "KVK" :status :planned :terms-verified-on nil
   :license-candidate "Open Dataset Basis Bedrijfsgegevens は CC BY 4.0（developers.kvk.nl、2026-11-18 確認）"
@@ -68,6 +77,7 @@
  {:id :us-sec-edgar :jurisdiction "US" :registry "SEC EDGAR"
   :access :bulk-json :key-required? false
   :license "SEC.gov の情報は公開情報で、SEC の許可なく複製・再配布できる。出典として SEC を示す。SEC の印章・ロゴ・EDGAR の商標は使わない（SEC.gov「Privacy and Security Policy」）"
+  :attribution "制限なし（表示義務なし。Organizer 指定 2026-11-23）。出典として SEC を示す慣行は :license 記載どおり。SEC の印章・ロゴ・EDGAR の商標は使わない"
   :url "https://www.sec.gov/search-filings/edgar-application-programming-interfaces"
   :terms-url "https://www.sec.gov/privacy"
   :access-conditions {:user-agent "名前と連絡先メールアドレスを User-Agent に申告する（例: Sample Company Name AdminContact@<domain>）"
@@ -79,6 +89,7 @@
   :status :implemented :parser itonami.legal-entity.us-sec-edgar}
  {:id :ca-ised :jurisdiction "CA" :registry "ISED Corporations Canada"
   :access :bulk-csv :key-required? false :license "Open Government Licence - Canada"
+  :attribution "出典：ISED Corporations Canada（Open Government Licence - Canada / OGL-Canada の出所表示）"
   :url "https://open.canada.ca/data/en/dataset/0032ce54-c5dd-4b66-99a0-320a7b5e99f2"
   :terms-url "https://open.canada.ca/en/open-government-licence-canada"
   :terms-verified-on "2026-11-18"
@@ -89,6 +100,7 @@
   :blocked-reason "ライセンスの記載が二次情報で食い違う（dados.gov.br は CC BY、別の情報では Receita の公開場所が CC BY-ND 3.0 で改変不可）。dados.gov.br と Receita Federal の一次資料を取得できなかった。Empresas には個人事業主（MEI など）の氏名が入るため、除外の規則も要る。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :au-abr :jurisdiction "AU" :registry "Australian Business Register"
   :access :bulk-xml :key-required? false :license "CC BY 3.0 AU"
+  :attribution "出典：Australian Business Register（CC BY 3.0 AU の出所表示）"
   :url "https://data.gov.au/data/dataset/abn-bulk-extract"
   :spec-url "https://data.gov.au/data/dataset/5bd7fcab-e315-42cb-8daf-50b7efc2027e/resource/f3f8f8a1-590c-4d87-8285-806b093c2c69/download/bulkextract.xsd"
   :spec-sha256 "e19f5f991fdc3498e71faaf9f88574cab5d1d7d3cc23015c324e2f75ca45c670"
