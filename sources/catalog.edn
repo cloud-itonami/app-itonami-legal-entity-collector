@@ -97,7 +97,7 @@
   :notes "個人事業主（LegalEntity / IND）は取り込まない。家族名を含みうる信託・組合も取り込まず、PRV・PUB・COP・OIE だけを受け付ける。XML から map への変換は未実装。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"
   :status :implemented :parser itonami.legal-entity.au-abr}
  {:id :nz-nzbn :jurisdiction "NZ" :registry "NZBN" :status :planned :terms-verified-on nil
-  :blocked-reason "一括データは Companies Office の Bulk Data Access Agreement への同意が要り、利用目的を超えると NZBN API（登録が要る）を求められる。NZBN API の利用条件を一次資料で確認できなかった。同意は owner の判断。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
+  :blocked-reason "BDAA は申請しない（owner 判断 2026-11-23）。当面は NZBN API 経路のみ。NZBN API の利用条件は一次資料で部分確認済み（2026-11-23。署名済み MBIE API Access Agreement と購読申請・審査が要る。料金なし。表示義務あり。再配布の範囲とレート制限は未確認。詳細は docs/sources/blocked-summary-20261123.md の NZ の節）。条件確定まで取得しない。マーケティング・リード獲得用途には用いない（方針）。個人データは初期スコープ外。"}
  {:id :za-cipc :jurisdiction "ZA" :registry "CIPC" :status :planned :terms-verified-on nil
   :blocked-reason "公式の一括データ・公開 API が見つからない。二次情報では CIPC の利用条件が機械的な一括取得を禁じ、再販にはライセンスが要る。新しいオープンデータポータルを準備中との報道（2026-07）があり、公開を待つ。Legal: 個人データ（役員・個人事業者・住所）はライセンスとは別判断。初期スコープは法人の基本情報に限定し、役員名・個人事業主は初期スコープに入れない。"}
  {:id :il-rasham :jurisdiction "IL" :registry "Israeli Corporations Authority" :status :planned :terms-verified-on nil
