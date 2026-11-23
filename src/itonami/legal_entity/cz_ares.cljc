@@ -108,6 +108,10 @@
   "バックオフ待機の総和の上限（30秒）。総和は 15000ms で上限内に収まる。"
   30000)
 
+(def min-interval-ms
+  "同一の request-fn への呼び出し間隔の下限（500件/分 → 120ms）。rate-window-ms と max-requests-per-minute から導く。"
+  (quot rate-window-ms max-requests-per-minute))
+
 (defn retryable-status?
   "429 と 5xx のみ true（再試行の対象）。それ以外（200・400・404 等）は false。"
   [status]
@@ -142,3 +146,43 @@
   (let [b (retry-wait-ms {:status status :attempt attempt})]
     (when (some? b)
       (max b (throttle-wait-ms now-ms (or call-times []))))))
+
+(defn success-status?
+  "2xx のみ true。数字以外の入力は false（副作用なしで安全に判定できるよう順序を保つ）。"
+  [status]
+  (and (integer? status) (<= 200 status 299)))
+
+(defn interval-wait-ms
+  "最後の試行時刻 last-attempt-ms から now-ms までに min-interval-ms の間隔を確保するための残り待機ミリ秒。最後の試行が無い・時刻が数字でない場合は 0。"
+  [last-attempt-ms now-ms]
+  (if (and (integer? last-attempt-ms) (integer? now-ms))
+    (max 0 (- min-interval-ms (- now-ms last-attempt-ms)))
+    0))
+
+(defn request-with-retry
+  "request-fn（引数なしで {:status s :body b} を返す）を 429 と 5xx の間だけ最大 4 回再試行する。
+  待機は指数バックオフ（1s → 2s → 4s → 8s）と、同 request-fn への次回呼び出しまでの
+  120ms 間隔のうち長い方とし、総待機は 30000ms を超えたら再試行を止める。
+  request-fn・sleep-fn（待機ミリ秒）・now-fn（現在時刻ミリ秒）はすべて引数で注入する。
+  この namespace が直接ファイル・ネットワーク・時計に触れることはない。
+  成功時（2xx）は body をそのまま返す。失敗は {:status :attempts :waited-ms} で返す。"
+  [request-fn sleep-fn now-fn]
+  (loop [attempt 1 waited 0 last-attempt nil]
+    (let [started (now-fn)
+          resp (request-fn)
+          status (:status resp)]
+      (cond
+        (success-status? status) (:body resp)
+        (not (retryable-status? status)) {:status status :attempts attempt :waited-ms waited}
+        :else
+        (let [backoff (backoff-ms attempt)]
+          (if (nil? backoff)
+            {:status status :attempts attempt :waited-ms waited}
+            (let [wait (max backoff (interval-wait-ms last-attempt (now-fn)))]
+              (if (> (+ waited wait) max-total-wait-ms)
+                {:status status :attempts attempt :waited-ms waited}
+                (do (when (pos? wait)
+                      (sleep-fn wait))
+                    (recur (inc attempt)
+                           (+ waited wait)
+                           started))))))))))

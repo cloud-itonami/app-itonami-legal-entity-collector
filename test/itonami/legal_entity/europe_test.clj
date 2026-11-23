@@ -306,6 +306,66 @@
     (is (nil? (cz/retry-wait-ms {:status 404 :attempt 1})))
     (is (nil? (cz/next-wait-ms {:status 404 :attempt 1 :now-ms 0 :call-times []})))))
 
+;; リトライ実行関数（request-with-retry）。時刻・sleep は注入し、実時間では眠らない。
+;; fake clock は sleep の分だけ進む。ステータスは架空のもののみ。
+
+(defn- run-request
+  "statuses を順に返す fake request-fn（無くなったら最後を繰り返す）で cz/request-with-retry を実行し、
+  {:result r :sleeps [...] :calls n} を返す。実時間では眠らない。"
+  [statuses body]
+  (let [clock (atom 0) sleeps (atom []) calls (atom 0)
+        rest (atom (seq statuses))]
+    (let [result (cz/request-with-retry
+                  (fn [] (swap! calls inc)
+                        (let [s (first @rest)]
+                          (when (next @rest) (swap! rest next))
+                          {:status s :body body}))
+                  (fn [ms] (swap! sleeps conj ms) (swap! clock + ms))
+                  (fn [] @clock))]
+      {:result result :sleeps @sleeps :calls @calls})))
+
+(deftest cz-ares-retry-executor
+  "request-with-retry（429 と 5xx のみ、1s-2s-4s-8s、上限 4 回、総待機 30 秒、120ms 間隔）。時刻は fake。 "
+  (testing "① 429 → 再試行 → 成功"
+    (let [{:keys [result sleeps calls]} (run-request [429 200] {:ok true})]
+      (is (= {:ok true} result) "成功時は body をそのまま返す")
+      (is (= [1000] sleeps))
+      (is (= 2 calls)))
+    (let [{:keys [result sleeps calls]} (run-request [503 200] {:ok true})]
+      (is (= {:ok true} result) "5xx も再試行する")
+      (is (= [1000] sleeps))
+      (is (= 2 calls))))
+  (testing "② 上限で停止（初発 + 再試行 4 回 = 5 試行）"
+    (let [{:keys [result sleeps calls]} (run-request [429] nil)]
+      (is (= [1000 2000 4000 8000] sleeps))
+      (is (= 5 calls))
+      (is (= {:status 429 :attempts 5 :waited-ms 15000} result))))
+  (testing "③ 総待機が 30 秒を超えない"
+    (let [{:keys [result sleeps]} (run-request [500 502 503 599 503] nil)]
+      (is (<= (reduce + 0 sleeps) cz/max-total-wait-ms))
+      (is (<= (:waited-ms result) cz/max-total-wait-ms))))
+  (testing "④ レート遵守：同一 request-fn への試行間隔が 120ms 未満にならない"
+    (is (= 120 cz/min-interval-ms))
+    (is (= 70 (cz/interval-wait-ms 0 50)) "不足分を sleep で補う計算")
+    (is (= 0 (cz/interval-wait-ms 0 120)) "境界は待たない")
+    (is (= 0 (cz/interval-wait-ms 0 200)) "間隔が十分なら待たない")
+    (is (= 0 (cz/interval-wait-ms nil 0)) "初回は待たない")
+    (let [clock (atom 0) sleeps (atom []) times (atom []) n (atom 0)
+          req (fn [] (swap! times conj @clock)
+                    {:status (if (= 1 (swap! n inc)) 429 200) :body {:ok true}})
+          body (cz/request-with-retry req
+                                      (fn [ms] (swap! sleeps conj ms) (swap! clock + ms))
+                                      (fn [] @clock))]
+      (is (= {:ok true} body))
+      (is (= [1000] @sleeps) "sleep で間隔が確保された")
+      (is (every? #(<= 120 %) (map - (rest @times) @times)) "試行時刻の差が 120ms 以上")))
+  (testing "⑤ 429 以外の 4xx は再試行しない"
+    (doseq [s [400 403 404]]
+      (let [{:keys [result sleeps calls]} (run-request [s] nil)]
+        (is (= 1 calls) (str s))
+        (is (= [] sleeps) (str s))
+        (is (= {:status s :attempts 1 :waited-ms 0} result) (str s))))))
+
 ;; --- カタログ -------------------------------------------------------------
 
 (deftest europe-catalog
