@@ -5,6 +5,7 @@
             [clojure.test :refer [deftest is testing]]
             [itonami.legal-entity.collect :as collect]
             [itonami.legal-entity.csv :as csv]
+            [itonami.legal-entity.cz-ares :as cz]
             [itonami.legal-entity.fi-prh :as fi]
             [itonami.legal-entity.fr-sirene :as fr]
             [itonami.legal-entity.gb-companies-house :as gb]
@@ -258,6 +259,39 @@
       (is (= [{:index 2 :skip "fyzická osoba podnikající（個人事業主）"}] (:skipped res))))
     (testing "負の対照: チェックデジット不一致、IČO 未割当の icoId"
       (is (= [3 4] (map :index (:rejected res)))))))
+
+(deftest cz-ares-retry
+  "リトライとレート制限（cz_ares.cljc の取得ポリシー、純粋関数）。時刻は注入する。"
+  (testing "失敗 → 再試行 → 上限で止まる"
+    (is (= 1000 (cz/retry-wait-ms {:status 429 :attempt 1})))
+    (is (= 2000 (cz/retry-wait-ms {:status 500 :attempt 2})))
+    (is (= 4000 (cz/retry-wait-ms {:status 503 :attempt 3})))
+    (is (nil? (cz/retry-wait-ms {:status 429 :attempt 4})) "再試行の上限（3 回）で止まる")
+    (is (nil? (cz/retry-wait-ms {:status 500 :attempt 99}))))
+  (testing "対象は 429 と 5xx のみ"
+    (is (every? cz/retryable-status? [429 500 502 599]))
+    (is (not-any? cz/retryable-status? [200 400 401 404 428 600 nil]))
+    (is (nil? (cz/retry-wait-ms {:status 404 :attempt 1})) "対象外は再試行しない")
+    (is (nil? (cz/retry-wait-ms {:status 400 :attempt 1}))))
+  (testing "500 件までは待たず、501 件目は窓の外まで待つ"
+    (is (= 0 (cz/throttle-wait-ms 0 (repeat 499 0))))
+    (is (= 60000 (cz/throttle-wait-ms 0 (repeat 500 0))))
+    (is (= 0 (cz/throttle-wait-ms 60000 (repeat 500 0))) "窓の外（境界）の呼び出しは数えない"))
+  (testing "バースト 600 件でも 60 秒窓に 500 件を超えない"
+    (let [times (loop [now 0 times [] i 0]
+                  (if (>= i 600) times
+                    (let [now (+ now (cz/throttle-wait-ms now times))]
+                      (recur now (conj times now) (inc i)))))]
+      (is (= 60000 (last times)))
+      (is (every? (fn [i]
+                    (let [t (nth times i)]
+                      (<= (count (filter #(< % (+ t cz/rate-window-ms)) (drop i times)))
+                          cz/max-requests-per-minute)))
+                  (range (count times))))))
+  (testing "リトライでもスロットルを守る（大きい方の待機）"
+    (is (= 60000 (cz/next-wait-ms {:status 429 :attempt 1 :now-ms 0 :call-times (vec (repeat 500 0))})))
+    (is (= 1000 (cz/next-wait-ms {:status 429 :attempt 1 :now-ms 0 :call-times []})))
+    (is (nil? (cz/next-wait-ms {:status 404 :attempt 1 :now-ms 0 :call-times []})))))
 
 ;; --- カタログ -------------------------------------------------------------
 

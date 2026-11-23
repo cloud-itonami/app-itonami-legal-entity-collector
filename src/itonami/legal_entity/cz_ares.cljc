@@ -81,3 +81,60 @@
                       aktualizace (assoc-in [:source :updated-on] aktualizace))
                 ps (schema/problems r)]
             (if (seq ps) {:reject (str/join "; " ps)} {:record r})))))))
+
+;; --- 取得ポリシー（リトライとレート制限） --------------------------------
+;; 純粋関数のみ。ファイル・ネットワーク・時計に触れない（時刻は引数で渡す）。
+;; 根拠: 財務省（MFČR）の運用条件（https://www.mfcr.cz/cs/ministerstvo/informacni-systemy/ares 、
+;; 2026-11-23 確認）は 500件/分超過を受けてアクセス制限・遮断がありうるとする。取得側は
+;; 下記の関数の戻り値どおりに待機して 500件/分を守り、429 と 5xx のみ指数バックオフで再試行する。
+
+(def max-requests-per-minute
+  "運用条件の上限（500件/分）。"
+  500)
+
+(def rate-window-ms
+  "レート制限の窓（60秒）。"
+  60000)
+
+(def max-retries
+  "再試行の上限（初回に加えて最大 3 回まで。総試行数は最大 4）。"
+  3)
+
+(def backoff-schedule-ms
+  "再試行待機の指数バックオフ（1s → 2s → 4s）。"
+  [1000 2000 4000])
+
+(defn retryable-status?
+  "429 と 5xx のみ true（再試行の対象）。それ以外（200・400・404 等）は false。"
+  [status]
+  (and (integer? status)
+       (or (= 429 status)
+           (<= 500 status 599))))
+
+(defn backoff-ms
+  "attempt（これまでの試行数。初回は 1）に対し、次の再試行までの待機ミリ秒を返す。上限を超えたら nil。"
+  [attempt]
+  (when (and (integer? attempt) (<= 1 attempt max-retries))
+    (nth backoff-schedule-ms (dec attempt))))
+
+(defn retry-wait-ms
+  "失敗応答 {:status s :attempt n} が再試行に値するか。値すれば待機ミリ秒、しなければ nil。"
+  [{:keys [status attempt]}]
+  (when (retryable-status? status)
+    (backoff-ms attempt)))
+
+(defn throttle-wait-ms
+  "任意の 60 秒窓に 500 件を超えないための待機ミリ秒（スライディングウィンドウ）。
+  now-ms は現在時刻（ミリ秒）、call-times は過去の呼び出し時刻の列。待つ必要がなければ 0。"
+  [now-ms call-times]
+  (let [recent (filter #(> % (- now-ms rate-window-ms)) call-times)]
+    (if (>= (count recent) max-requests-per-minute)
+      (max 0 (- (+ (apply min recent) rate-window-ms) now-ms))
+      0)))
+
+(defn next-wait-ms
+  "次の呼び出しまでの待機ミリ秒。再試行しないなら nil、それ以外はバックオフとスロットルの大きい方。"
+  [{:keys [status attempt now-ms call-times]}]
+  (let [b (retry-wait-ms {:status status :attempt attempt})]
+    (when (some? b)
+      (max b (throttle-wait-ms now-ms (or call-times []))))))
