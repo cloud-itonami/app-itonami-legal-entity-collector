@@ -110,6 +110,16 @@
   [s]
   (digits? s 8))
 
+(defn cz-ico?
+  "チェコの IČO（8 桁）。先頭 7 桁に重み 8,7,6,5,4,3,2 を掛けて合計し、11 で割った余りから
+  末尾の検査桁を求める（余り 0→1、1→0、他は 11−余り。余り 1 の場合は 0）。IČO 25596641 で検算済み。"
+  [s]
+  (and (digits? s 8)
+       (let [ds (map digit (take 7 s))
+             r (mod (weighted-sum [8 7 6 5 4 3 2] ds) 11)
+             check (case r 0 1 1 0 (- 11 r))]
+         (= check (last (map digit s))))))
+
 (defn country-code?
   "ISO 3166-1 alpha-2 の形（大文字 2 文字）。実在の国かまでは見ない。"
   [s]
