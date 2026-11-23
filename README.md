@@ -1,5 +1,7 @@
 # app-itonami-legal-entity-collector
 
+正本: `cloud-itonami/app-itonami-legal-entity-collector` (repo ID `1461722115`)。`network-awai/...` は transfer redirect で同一 repo (ID と blob SHA の一致で確認)。
+
 公開一次情報（各国の法人登記・GLEIF）から法人データを集め、出典つきの共通スキーマに正規化する Itonami profile です。D&B・帝国データバンク・Moody's の契約データに頼らない、Awai Network の自前の企業データ基盤の収集側にあたります（Linear AWAI-3186）。
 
 ## いまあるもの（2026-11-18 時点）
