@@ -25,14 +25,16 @@
     (is (every? ids/fr-siren? ["999900004" "999900012" "999900020"]))
     (is (every? ids/no-orgnr? ["999000002" "999000010" "999000029"]))
     (is (every? ids/fi-business-id? ["9990000-8" "9990001-6" "9990002-4"]))
-    (is (ids/gb-company-number? "ZZ000001")))
+    (is (ids/gb-company-number? "ZZ000001"))
+    (is (ids/ee-registry-code? "99999999")))
   (testing "負の対照"
     (is (not (ids/fr-siren? "999900005")))
     (is (not (ids/no-orgnr? "999000003")))
     (is (not (ids/fi-business-id? "9990000-7")))
     (is (not (ids/fi-business-id? "99900008")) "ハイフンなし")
     (is (not (ids/gb-company-number? "zz000001")))
-    (is (not (ids/gb-company-number? "ZZ00001")) "7 文字")))
+    (is (not (ids/gb-company-number? "ZZ00001")) "7 文字")
+    (is (not (ids/ee-registry-code? "9999999")) "7 桁")))
 
 ;; --- GB -------------------------------------------------------------------
 
@@ -163,20 +165,64 @@
     (testing "負の対照: チェックデジット不一致"
       (is (= [4] (map :index (:rejected res)))))))
 
+;; --- EE -------------------------------------------------------------------
+;; 17 列の見出しは 2026-11-23 に取得した lihtandmed.csv.zip の先頭行どおり。
+;; 区切りは ;（csv/rows の 2 引数版）。架空データだけ。
+
+(def ee-header
+  (str/join ";" ["nimi" "ariregistri_kood" "ettevotja_oiguslik_vorm" "ettevotja_oigusliku_vormi_alaliik"
+                 "kmkr_nr" "ettevotja_staatus" "ettevotja_staatus_tekstina" "ettevotja_esmakande_kpv"
+                 "ettevotja_aadress" "asukoht_ettevotja_aadressis" "asukoha_ehak_kood" "asukoha_ehak_tekstina"
+                 "indeks_ettevotja_aadressis" "ads_adr_id" "ads_ads_oid" "ads_normaliseeritud_taisaadress"
+                 "teabesysteemi_link"]))
+
+(defn- ee [& xs] (str/join ";" xs))
+
+(def ee-lines
+  [ee-header
+   (ee "FICTIVE HOLDING OÜ" "99999999" "Osaühing" "" "" "R" "Registrisse kantud" "05.06.2023"
+       "Regati pst 1" "TEST LINNA, Tallinn, Harju maakond" "0596" "Tallinn" "11911" "1" "2"
+       "Harju maakond, Tallinn, TEST LINNA, Regati pst 1" "https://example.test/99999999")
+   (ee "FICTIVE LIKVIDEERIMISEL AS" "99999998" "Aktsiaselts" "" "" "L" "Likvideerimisel" "01.02.2010"
+       "" "Tartu linn, Tartu linn, Tartu maakond" "8151" "Tartu" "51003" "" "" "" "https://example.test/99999998")
+   (ee "VANA FIKTIIV" "99999997" "Täisühing" "" "" "N" "Pankrotis" "03.03.2003"
+       "" "" "" "" "" "" "" "" "https://example.test/99999997")
+   (ee "FIKTIIV FIE" "99999996" "Füüsilisest isikust ettevõtja" "" "" "R" "Registrisse kantud" "04.04.2004"
+       "" "" "" "" "" "" "" "" "https://example.test/99999996")
+   (ee "BAD CODE OÜ" "123456" "Osaühing" "" "" "R" "Registrisse kantud" "04.04.2004"
+       "" "" "" "" "" "" "" "" "https://example.test/123456")])
+
+(deftest ee-ariregister
+  (let [res (collect/collect catalog :ee-ariregister ee-lines)
+        [a b c] (:records res)]
+    (is (= ["ee-ariregister:99999999" "ee-ariregister:99999998" "ee-ariregister:99999997"]
+           (map :entity/id (:records res))))
+    (is (every? schema/valid? (:records res)))
+    (is (= [:active "2023-06-05" "Regati pst 1" "11911" {:scheme :ee-legal-form :code "Osaühing" :label "Osaühing"}]
+           [(:entity/status a) (:entity/registered-on a) (get-in a [:entity/address :street])
+            (get-in a [:entity/address :postal-code]) (:entity/legal-form a)]))
+    (is (= [:inactive :inactive] [(:entity/status b) (:entity/status c)]))
+    (testing "個人事業主は取り込まない"
+      (is (= [{:index 3 :skip "füüsilisest isikust ettevõtja（個人事業主）"}] (:skipped res))))
+    (testing "負の対照: 6 桁コードは拒否"
+      (is (= [4] (map :index (:rejected res)))))))
+
 ;; --- カタログ -------------------------------------------------------------
 
 (deftest europe-catalog
   (let [by-id (into {} (map (juxt :id identity) catalog))]
-    (testing "利用条件と仕様を確認した 4 ソースだけ実装済み"
-      (doseq [id [:gb-companies-house :fr-sirene :no-brreg :fi-prh]]
+    (testing "利用条件と仕様を確認した 5 ソースだけ実装済み"
+      (doseq [id [:gb-companies-house :fr-sirene :no-brreg :fi-prh :ee-ariregister]]
         (is (= :implemented (get-in by-id [id :status])) (name id))
         (is (every? (by-id id) [:license :url :terms-verified-on :parser]) (name id))))
     (testing "確認できなかったソースは受け付けない"
-      (doseq [id [:dk-cvr :ee-ariregister :be-kbo :cz-ares :ch-zefix :nl-kvk]]
+      (doseq [id [:dk-cvr :be-kbo :cz-ares :ch-zefix :nl-kvk]]
         (is (not= :implemented (get-in by-id [id :status])) (name id))
         (is (string? (get-in by-id [id :blocked-reason])) (name id))
         (is (:error (collect/collect catalog id [])) (name id))))))
 
 (deftest csv-rows
   (is (= [{"a" "1" "b" "2"} {:reject "列数が 1（見出しは 2）"}] (csv/rows ["a, b" "1,2" "3"])))
-  (is (= [] (csv/rows ["a,b"]))))
+  (is (= [] (csv/rows ["a,b"])))
+  (testing "; 区切りと BOM"
+    (is (= [{"a" "1" "b" "2"}] (csv/rows [(str (char 0xFEFF) "a;b") "1;2"] \;)))))
