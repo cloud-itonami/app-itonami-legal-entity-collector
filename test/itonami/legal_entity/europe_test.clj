@@ -219,6 +219,106 @@
     (testing "負の対照: 6 桁コードは拒否"
       (is (= [4] (map :index (:rejected res)))))))
 
+(deftest ee-ariregister-empty
+  (testing "空レスポンス: 入力が空でも :error にならず records は空"
+    (is (= {:source :ee-ariregister :records [] :skipped [] :rejected []}
+           (collect/collect catalog :ee-ariregister []))))
+  (testing "見出しだけでも records は空（見出し行自体はデータにしない）"
+    (is (= [] (:records (collect/collect catalog :ee-ariregister [ee-header]))))
+    (is (= [] (:rejected (collect/collect catalog :ee-ariregister [ee-header]))))
+    (is (= [] (vec (csv/rows []))))
+    (is (= [] (vec (csv/rows [ee-header] \;))))))
+
+(deftest ee-ariregister-column-mismatch
+  (testing "csv 層では列数不一致が 「列数が X（見出しは 17）」 で reject される"
+    (is (= [{:reject "列数が 2（見出しは 17）"}]
+           (vec (csv/rows [ee-header (ee "TOO FEW OÜ" "99999994")] \;))))
+    (is (= [{:reject "列数が 18（見出しは 17）"}]
+           (vec (csv/rows [ee-header (str (ee "FICTIVE KEEP OÜ" "99999990" "Osaühing" "" "" "R"
+                                           "Registrisse kantud" "05.06.2023" "Regati pst 1"
+                                           "TEST LINNA, Tallinn, Harju maakond" "0596" "Tallinn" "11911" "1" "2"
+                                           "Harju maakond, Tallinn, TEST LINNA, Regati pst 1"
+                                           "https://example.test/99999990") ";EXTRA")] \;)))))
+  (testing "collect 層では不足・超過の行は records に入らず rejected になる"
+    ;; collect 経由では csv の reject 理由は normalize の schema reject に置き換わるため、
+    ;; ここでは理由文ではなく index と件数で判定する（行が捨てられること自体を確認）。
+    (let [res (collect/collect catalog :ee-ariregister
+                                   [ee-header
+                                    (ee "FICTIVE KEEP OÜ" "99999990" "Osaühing" "" "" "R"
+                                        "Registrisse kantud" "05.06.2023" "Regati pst 1"
+                                        "TEST LINNA, Tallinn, Harju maakond" "0596" "Tallinn" "11911" "1" "2"
+                                        "Harju maakond, Tallinn, TEST LINNA, Regati pst 1"
+                                        "https://example.test/99999990")
+                                    (ee "TOO FEW OÜ" "99999994")
+                                    (str (ee "FICTIVE KEEP OÜ" "99999990" "Osaühing" "" "" "R"
+                                             "Registrisse kantud" "05.06.2023" "Regati pst 1"
+                                             "TEST LINNA, Tallinn, Harju maakond" "0596" "Tallinn" "11911" "1" "2"
+                                             "Harju maakond, Tallinn, TEST LINNA, Regati pst 1"
+                                             "https://example.test/99999990") ";EXTRA")])]
+      (is (= ["ee-ariregister:99999990"] (map :entity/id (:records res))))
+      (is (= [1 2] (map :index (:rejected res))))
+      (is (every? #(and (string? (:reject %)) (seq (:reject %))) (:rejected res))))))
+
+(deftest ee-ariregister-bom
+  (let [bom-header (str (char 0xFEFF) ee-header)
+        corp (ee "FICTIVE BOM OÜ" "99999993" "Osaühing" "" "" "R" "Registrisse kantud" "05.06.2023"
+                 "Regati pst 1" "TEST LINNA, Tallinn, Harju maakond" "0596" "Tallinn" "11911" "1" "2"
+                 "Harju maakond, Tallinn, TEST LINNA, Regati pst 1" "https://example.test/99999993")
+        res (collect/collect catalog :ee-ariregister [bom-header corp])]
+    (testing "BOM 付き見出しでも法人行が取り込まれる"
+      (is (= ["ee-ariregister:99999993"] (map :entity/id (:records res))))
+      (is (= "FICTIVE BOM OÜ" (:entity/name (first (:records res)))))
+      (is (every? schema/valid? (:records res))))
+    (testing "csv 層でも BOM が列名から取り除かれる"
+      (let [m (first (csv/rows [bom-header corp] \;))]
+        (is (= "FICTIVE BOM OÜ" (get m "nimi")))
+        (is (= "99999993" (get m "ariregistri_kood")))))))
+
+(deftest ee-ariregister-semicolon
+  (testing "区切りは ; / カンマは区切りとして扱わない"
+    (is (= ["a" "b" "c"] (csv/parse-line "a;b;c" \;)))
+    (is (= ["a,b,c"] (csv/parse-line "a,b,c" \;)))
+    (is (= ["a;b;c"] (csv/parse-line "a;b;c" \,))))
+  (let [corp (ee "FICTIVE SEMI OÜ" "99999992" "Osaühing" "" "" "R" "Registrisse kantud" "05.06.2023"
+                 "Regati pst 1" "TEST LINNA, Tallinn, Harju maakond" "0596" "Tallinn" "11911" "1" "2"
+                 "Harju maakond, Tallinn, TEST LINNA, Regati pst 1" "https://example.test/99999992")
+        res (collect/collect catalog :ee-ariregister [ee-header corp])]
+    (testing "; 区切りでは住所内のカンマが分割されない"
+      (is (= ["ee-ariregister:99999992"] (map :entity/id (:records res))))
+      (is (= "TEST LINNA, Tallinn, Harju maakond"
+             (get-in (first (:records res)) [:entity/address :locality]))))
+    (testing "カンマ区切りの入力では records は作られない"
+      (let [comma (collect/collect catalog :ee-ariregister
+                                       [(str/replace ee-header ";" ",") (str/replace corp ";" ",")])]
+        (is (= [] (:records comma)))
+        (is (= [0] (map :index (:rejected comma))))))))
+
+(deftest ee-ariregister-non-corporate
+  (let [fie (ee "FIKTIIV FIE" "99999991" "Füüsilisest isikust ettevõtja" "" "" "R" "Registrisse kantud" "04.04.2004"
+                "" "" "" "" "" "" "" "" "https://example.test/99999991")
+        corp (ee "FICTIVE KEEP OÜ" "99999990" "Osaühing" "" "" "R" "Registrisse kantud" "05.06.2023"
+                 "Regati pst 1" "TEST LINNA, Tallinn, Harju maakond" "0596" "Tallinn" "11911" "1" "2"
+                 "Harju maakond, Tallinn, TEST LINNA, Regati pst 1" "https://example.test/99999990")
+        blank (ee "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "" "")
+        noname (ee "" "99999989" "Osaühing" "" "" "R" "Registrisse kantud" "05.06.2023"
+                   "" "" "" "" "" "" "" "" "https://example.test/99999989")
+        res (collect/collect catalog :ee-ariregister [ee-header fie corp blank noname])]
+    (testing "個人事業主（FIE）は法人として取り込まず skip する"
+      (is (= ["ee-ariregister:99999990"] (map :entity/id (:records res))))
+      (is (= [{:index 0 :skip "füüsilisest isikust ettevõtja（個人事業主）"}] (:skipped res))))
+    (testing "全項目空の行と名称なしの行は records に入らず rejected になる"
+      (is (= [2 3] (map :index (:rejected res))))
+      (is (= "entity/name が空" (:reject (second (:rejected res))))))
+    (testing "コードが不正でも FIE は skip（法人形態の判定が先）"
+      (let [res (collect/collect catalog :ee-ariregister
+                                   [ee-header
+                                    (ee "FIKTIIV FIE" "123" "Füüsilisest isikust ettevõtja" "" "" "R"
+                                        "Registrisse kantud" "04.04.2004" "" "" "" "" "" "" "" ""
+                                        "https://example.test/123")])]
+        (is (= [] (:records res)))
+        (is (= [{:index 0 :skip "füüsilisest isikust ettevõtja（個人事業主）"}] (:skipped res)))
+        (is (= [] (:rejected res)))))))
+
 ;; --- CZ -------------------------------------------------------------------
 
 ;; 項目名は 2026-11-23 に取得した OpenAPI 定義（v1.4.0）の EconomickySubjekt / Adresa どおり。
