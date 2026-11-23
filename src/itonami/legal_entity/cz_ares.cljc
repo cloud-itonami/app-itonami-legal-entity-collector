@@ -97,15 +97,15 @@
   60000)
 
 (def max-retries
-  "再試行の上限（初回に加えて最大 3 回まで。総試行数は最大 4）。上限定数で実装と文面を一致させる。"
-  3)
+  "再試行の上限（初回に加えて最大 4 回まで。総試行数は最大 5）。"
+  4)
 
 (def backoff-schedule-ms
-  "再試行待機の指数バックオフ（1s → 2s → 4s）。"
-  [1000 2000 4000])
+  "再試行待機の指数バックオフ（1s → 2s → 4s → 8s）。"
+  [1000 2000 4000 8000])
 
 (def max-total-wait-ms
-  "バックオフ待機の総和の上限（30秒）。総和は 7000ms で上限内に収まる。"
+  "バックオフ待機の総和の上限（30秒）。総和は 15000ms で上限内に収まる。"
   30000)
 
 (defn retryable-status?
@@ -146,50 +146,71 @@
     (when (some? b)
       (max b (throttle-wait-ms now-ms (or call-times []))))))
 
+(def min-interval-ms
+  "送信間隔の下限（500件/分の平均間隔 120ms。連続送信のバーストを避けるため）。"
+  120)
+
+(defn pace-wait-ms
+  "次の送信まで待つミリ秒。最後の送信から min-interval-ms 以上の間隔を保ち、
+  かつ任意の 60 秒窓に max-requests-per-minute 件を超えないための待機。"
+  [now-ms call-times]
+  (let [last-ms (last call-times)
+        interval-wait (if last-ms (max 0 (- (+ last-ms min-interval-ms) now-ms)) 0)
+        ready-ms (+ now-ms interval-wait)]
+    (+ interval-wait (throttle-wait-ms ready-ms call-times))))
+
 (defn new-request-state
   "1 run 内で引き継ぐ取得状態（送信時刻の履歴と照会キャッシュ）。atom は使わない。"
   []
   {:call-times [] :cache {}})
 
 (def dedupe-window-ms
-  "同一照会の再利用窓（60秒）。この窓内の同じ照会キーは送信せず、キャッシュを返す。窓を過ぎたら再送信する。"
+  "同一照会を跳ばす窓（60秒）。この窓内の同じ query は skip-query? で true。"
   60000)
+
+(defn skip-query?
+  "直近 dedupe-window-ms 以内に同じ query が call-log にあれば true（同一照会の反復をしない）。
+  call-log は {:query 照会キー :at 送信時刻ミリ秒} の列。時刻は引数で渡し、ファイル・ネットワーク・時計に触れない。"
+  [now-ms query call-log]
+  (boolean (some (fn [entry]
+                   (let [q (:query entry)
+                         at (:at entry)
+                         diff (when (number? at) (- now-ms at))]
+                     (and (= q query)
+                          (some? diff)
+                          (<= 0 diff)
+                          (< diff dedupe-window-ms))))
+                 call-log)))
 
 (defn fetch-with-retry
   "1 照会を実行する。:fetch（照会キー → 応答 {:status ...}）、:now（→ ミリ秒）、:sleep（ミリ秒）
   は注入する。この関数はネットワークと時計に直接触れない。
-  :state は new-request-state の map で、呼び出し側が次の照会に引き継ぐ。IČO 照会は fetch-ico が照会キーとして渡す。
+  :state は new-request-state の map で、呼び出し側が次の照会に引き継ぐ。
   戻り値は {:response :attempts :waited-ms :deduped? :state}（:waited-ms はバックオフ待機の総和）。
-  - 同じ :request-key を dedupe-window-ms（60秒）以内に 2 回渡すと、2 回目は送信せず初回応答のキャッシュを返す（同一照会の反復をしない）。窓を過ぎたら再送信する。
-  - 429 と 5xx のみ再試行する（指数バックオフ 1s → 2s → 4s、上限 3 回、総試行 4）。
+  - 同じ :request-key を 1 run 内で 2 回渡すと、2 回目は送信せず初回応答のキャッシュを返す。
+  - 429 と 5xx のみ再試行する（指数バックオフ 1s → 2s → 4s → 8s、上限 4 回）。
     バックオフ総和が max-total-wait-ms（30 秒）を超える場合は待たずに停止する。
-  - 送信前に throttle-wait-ms の戻りだけ待つ（60秒窓で500件を超えないための自己スロットル）。待機した後に送信時刻を (now) で記録し、:fetch を呼ぶ。"
+  - 送信前に pace-wait-ms 分だけ :sleep で待つ（120ms 間隔と 60 秒窓に 500 件まで）。"
   [{:keys [fetch now sleep request-key state]
     :or {state (new-request-state)}}]
-  (let [cached (when (some? request-key) (get (:cache state) request-key))]
-    (if (and (some? cached) (< (- (now) (:at cached)) dedupe-window-ms))
-      {:response (:response cached) :attempts 0 :waited-ms 0
-       :deduped? true :state state}
-      (loop [attempt 1 waited 0 st state]
-        (let [tw (throttle-wait-ms (now) (:call-times st))]
-          (when (pos? tw) (sleep tw))
-          (let [st (update st :call-times conj (now))
-                resp (fetch request-key)
-                status (:status resp)
-                st (if (some? request-key)
-                     (assoc-in st [:cache request-key] {:response resp :at (now)})
-                     st)]
-            (if (retryable-status? status)
-              (let [b (retry-wait-ms {:status status :attempt attempt :waited-ms waited})]
-                (if (nil? b)
-                  {:response resp :attempts attempt :waited-ms waited
-                   :deduped? false :state st}
-                  (do (sleep b)
-                      (recur (inc attempt) (+ waited b) st))))
-              {:response resp :attempts attempt :waited-ms waited
-               :deduped? false :state st})))))))
-
-(defn fetch-ico
-  "IČO を照会キーとして fetch-with-retry で取得する。取得側の呼び出しはこの関数に集約する。"
-  [{:keys [fetch now sleep ico state]}]
-  (fetch-with-retry {:fetch fetch :now now :sleep sleep :request-key ico :state state}))
+  (if (and (some? request-key) (contains? (:cache state) request-key))
+    {:response (get (:cache state) request-key) :attempts 0 :waited-ms 0
+     :deduped? true :state state}
+    (loop [attempt 1 waited 0 st state]
+      (let [pw (pace-wait-ms (now) (:call-times st))]
+        (when (pos? pw) (sleep pw))
+        (let [st (update st :call-times conj (now))
+              resp (fetch request-key)
+              status (:status resp)
+              st (if (some? request-key)
+                   (assoc-in st [:cache request-key] resp)
+                   st)]
+          (if (retryable-status? status)
+            (let [b (retry-wait-ms {:status status :attempt attempt :waited-ms waited})]
+              (if (nil? b)
+                {:response resp :attempts attempt :waited-ms waited
+                 :deduped? false :state st}
+                (do (sleep b)
+                    (recur (inc attempt) (+ waited b) st))))
+            {:response resp :attempts attempt :waited-ms waited
+             :deduped? false :state st}))))))
